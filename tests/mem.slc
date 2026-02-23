@@ -1,0 +1,10 @@
+import std.io;
+import std.mem;
+import std.main;
+using std;
+
+main memtest() {
+    mem.alloc(2, 1);
+    io.println("Memory allocated successfully.");
+    memtest.errorcode = 0;
+}

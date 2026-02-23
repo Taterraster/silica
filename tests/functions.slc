@@ -1,0 +1,68 @@
+import std.io;
+import std.main;
+
+// void function - no return value
+void greet(string name) {
+    io.print("Hello, ");
+    io.println(name);
+}
+
+// int function - single arg
+int double(int n) {
+    return n * 2;
+}
+
+// int function - multiple args
+int add(int a, int b) {
+    return a + b;
+}
+
+int multiply(int a, int b) {
+    return a * b;
+}
+
+// uses another user function internally
+int square(int n) {
+    return multiply(n, n);
+}
+
+// recursive function: factorial
+int factorial(int n) {
+    int result = 1;
+    int i = n;
+    return multiply(n, factorial(n - 1));
+}
+
+// pure int computation
+int hypotenuse_sq(int a, int b) {
+    return add(square(a), square(b));
+}
+
+main funcs() {
+    // void call
+    string msg = "Silica";
+    greet(msg);
+
+    // return value stored
+    int d = double(21);
+    io.print("double(21) = "); io.println(d);
+
+    // return value used directly in print
+    io.print("add(10,32) = "); io.println(add(10, 32));
+
+    // chained calls
+    io.print("square(7)  = "); io.println(square(7));
+
+    // used in math expression
+    int x = add(3, 4) * 2;
+    io.print("(3+4)*2    = "); io.println(x);
+
+    // hypotenuse
+    io.print("3^2 + 4^2  = "); io.println(hypotenuse_sq(3, 4));
+
+    // multiple params
+    int p = multiply(6, 7);
+    io.print("6 * 7      = "); io.println(p);
+
+    funcs.errorcode = 0;
+}

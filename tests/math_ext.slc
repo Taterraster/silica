@@ -1,0 +1,69 @@
+import std.io;
+import std.math;
+import std.main;
+
+main mathtest() {
+    // ── constants ──
+    io.println("=== constants ===");
+    io.println(math.pi);
+    io.println(math.e);
+    io.println(math.i);
+
+    float pi = math.pi;
+    io.print("pi stored:  "); io.println(pi);
+    float e = math.e;
+    io.print("e  stored:  "); io.println(e);
+
+    // ── sin ──
+    io.println("=== math.sin ===");
+    io.print("sin(0)   = "); io.println(math.sin(0));
+    io.print("sin(30)  = "); io.println(math.sin(30));
+    io.print("sin(45)  = "); io.println(math.sin(45));
+    io.print("sin(90)  = "); io.println(math.sin(90));
+    io.print("sin(180) = "); io.println(math.sin(180));
+
+    float s45 = math.sin(45);
+    io.print("sin(45) stored: "); io.println(s45);
+
+    // ── cos ──
+    io.println("=== math.cos ===");
+    io.print("cos(0)   = "); io.println(math.cos(0));
+    io.print("cos(60)  = "); io.println(math.cos(60));
+    io.print("cos(90)  = "); io.println(math.cos(90));
+    io.print("cos(180) = "); io.println(math.cos(180));
+
+    float c60 = math.cos(60);
+    io.print("cos(60) stored: "); io.println(c60);
+
+    // ── log ──
+    io.println("=== math.log ===");
+    io.print("ln(1)    = "); io.println(math.log(1));
+    io.print("ln(3)    = "); io.println(math.log(3));
+    io.print("ln(10)   = "); io.println(math.log(10));
+    io.print("ln(100)  = "); io.println(math.log(100));
+
+    float l10 = math.log(10);
+    io.print("ln(10) stored:  "); io.println(l10);
+
+    // ── integral ──
+    io.println("=== math.integral ===");
+    io.print("integral(0,10) = "); io.println(math.integral(0, 10));
+    io.print("integral(1,5)  = "); io.println(math.integral(1, 5));
+    io.print("integral(0,4)  = "); io.println(math.integral(0, 4));
+    io.print("integral(2,6)  = "); io.println(math.integral(2, 6));
+
+    float area = math.integral(3, 9);
+    io.print("integral(3,9) stored: "); io.println(area);
+
+    // ── sigma ──
+    io.println("=== math.sigma ===");
+    io.print("sigma(1,10)  = "); io.println(math.sigma(1, 10));
+    io.print("sigma(1,100) = "); io.println(math.sigma(1, 100));
+    io.print("sigma(5,15)  = "); io.println(math.sigma(5, 15));
+    io.print("sigma(1,4)   = "); io.println(math.sigma(1, 4));
+
+    int s = math.sigma(1, 10);
+    io.print("sigma(1,10) stored: "); io.println(s);
+
+    mathtest.errorcode = 0;
+}

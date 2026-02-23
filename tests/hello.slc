@@ -1,0 +1,9 @@
+import std.io;
+import std.main;
+using std;
+
+main program() {
+    io.print("Hello, ");
+    io.println("World!");
+    program.errorcode = 0;
+}

@@ -1,0 +1,48 @@
+import std.io;
+import std.net;
+import std.str;
+import std.time;
+import std.main;
+
+main net_demo() {
+
+    io.println("=== std.net HTTP client demo ===");
+
+    // Build the IP for 93.184.216.34 (example.com)
+    // net.ip(a, b, c, d) packs into a 32-bit int
+    int ip = net.ip(93, 184, 216, 34);
+    io.print("IP packed: ");
+    io.println(ip);
+
+    io.println("Connecting to example.com:80...");
+    int fd = net.connect(ip, 80);
+
+    if (fd < 0) {
+        io.println("Connection failed.");
+    } else {
+        io.print("Connected! fd = ");
+        io.println(fd);
+
+        // Build HTTP GET request
+        string req = str.concat("GET / HTTP/1.0\r\nHost: example.com\r\nConnection: close\r\n\r\n", "");
+
+        io.println("Sending HTTP GET...");
+        int sent = net.send(fd, req);
+        io.print("Bytes sent: ");
+        io.println(sent);
+
+        io.println("Receiving response (first 512 bytes)...");
+        string resp = net.recv(fd, 512);
+        io.println("--- Response ---");
+        io.println(resp);
+        io.println("--- End ---");
+
+        io.print("Response length: ");
+        io.println(str.length(resp));
+
+        net.close(fd);
+        io.println("Connection closed.");
+    }
+
+    net_demo.errorcode = 0;
+}

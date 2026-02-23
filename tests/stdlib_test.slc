@@ -1,0 +1,116 @@
+import std.io;
+import std.time;
+import std.str;
+import std.env;
+import std.proc;
+import std.main;
+
+main stdlib_test() {
+
+    // ════════════════════════════════════
+    // std.time
+    // ════════════════════════════════════
+    io.println("=== std.time ===");
+
+    int t1 = time.now();
+    io.print("epoch seconds: ");
+    io.println(t1);
+
+    int ms1 = time.now_ms();
+    io.print("epoch ms: ");
+    io.println(ms1);
+
+    io.println("sleeping 100ms...");
+    time.sleep(100);
+    int ms2 = time.now_ms();
+    io.print("elapsed >= 100ms: ");
+    int elapsed = ms2 - ms1;
+    if (elapsed >= 100) {
+        io.println("yes");
+    } else {
+        io.println("no");
+    }
+
+    int m1 = time.mono();
+    io.print("mono seconds: ");
+    io.println(m1);
+
+    // ════════════════════════════════════
+    // std.str (new functions)
+    // ════════════════════════════════════
+    io.println("=== std.str ===");
+
+    io.println(str.length("Hello"));
+    io.println(str.concat("foo", "bar"));
+    io.println(str.contains("foobar", "oba"));
+    io.println(str.contains("foobar", "xyz"));
+    io.println(str.slice("Hello World", 6, 5));
+
+    string s = str.from_int(12345);
+    io.println(s);
+
+    string sf = str.from_float(3.14);
+    io.println(sf);
+
+    int n = str.to_int("42");
+    io.println(n);
+    int neg = str.to_int("-99");
+    io.println(neg);
+
+    string up = str.upper("hello world");
+    io.println(up);
+
+    string lo = str.lower("HELLO WORLD");
+    io.println(lo);
+
+    string tr = str.trim("   hello   ");
+    io.println(tr);
+
+    string rep = str.repeat("ab", 3);
+    io.println(rep);
+
+    int c = str.char_at("Hello", 1);
+    io.println(c);
+
+    io.println(str.eq("abc", "abc"));
+    io.println(str.eq("abc", "xyz"));
+
+    // ════════════════════════════════════
+    // std.env
+    // ════════════════════════════════════
+    io.println("=== std.env ===");
+
+    int argc = env.argc();
+    io.print("argc: ");
+    io.println(argc);
+
+    string arg0 = env.argv(0);
+    io.print("argv[0]: ");
+    io.println(arg0);
+
+    string path = env.get("PATH");
+    io.print("PATH set: ");
+    if (str.length(path) > 0) {
+        io.println("yes");
+    } else {
+        io.println("no");
+    }
+
+    string novar = env.get("SILICA_UNDEFINED_VAR_XYZ");
+    io.print("undef var len: ");
+    io.println(str.length(novar));
+
+    // ════════════════════════════════════
+    // std.proc (safe subset)
+    // ════════════════════════════════════
+    io.println("=== std.proc ===");
+    int pid = proc.pid();
+    io.print("pid > 0: ");
+    if (pid > 0) {
+        io.println("yes");
+    } else {
+        io.println("no");
+    }
+
+    stdlib_test.errorcode = 0;
+}

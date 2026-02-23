@@ -1,0 +1,11 @@
+import std.io;
+import std.main;
+using std;
+
+main typetest() {
+    int count = 42;
+    char letter = 'A';
+    string greeting = "Silica works!";
+    io.println("Silica works!");
+    typetest.errorcode = 0;
+}

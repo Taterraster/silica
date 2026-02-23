@@ -1,0 +1,34 @@
+// mathutils.slh - reusable Silica math library
+// import mathutils; to use in any .slc file
+
+int abs_val(int n) {
+    if (n < 0) {
+        return n * -1;
+    }
+    return n;
+}
+
+int min_val(int a, int b) {
+    if (a < b) {
+        return a;
+    }
+    return b;
+}
+
+int max_val(int a, int b) {
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
+int clamp(int n, int lo, int hi) {
+    return min_val(max_val(n, lo), hi);
+}
+
+int factorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}

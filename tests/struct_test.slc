@@ -1,0 +1,73 @@
+import std.io;
+import std.main;
+
+struct Point {
+    int x;
+    int y;
+}
+
+struct Rect {
+    int x;
+    int y;
+    int w;
+    int h;
+}
+
+struct Color {
+    int r;
+    int g;
+    int b;
+}
+
+// Function taking struct pointer
+int point_sum(int px, int py) {
+    return px + py;
+}
+
+int rect_area(int w, int h) {
+    return w * h;
+}
+
+main struct_test() {
+    // Basic struct creation and field access
+    struct Point p;
+    p.x = 3;
+    p.y = 4;
+    io.print("Point: ");
+    io.print(p.x);
+    io.print(", ");
+    io.println(p.y);
+
+    // Struct in expressions
+    int dist = point_sum(p.x, p.y);
+    io.print("Sum: ");
+    io.println(dist);
+
+    // Multiple structs
+    struct Rect r;
+    r.x = 0;
+    r.y = 0;
+    r.w = 10;
+    r.h = 5;
+    io.print("Area: ");
+    io.println(rect_area(r.w, r.h));
+
+    // Struct field in arithmetic
+    int perimeter = 2 * r.w + 2 * r.h;
+    io.print("Perimeter: ");
+    io.println(perimeter);
+
+    // RGB color
+    struct Color c;
+    c.r = 255;
+    c.g = 128;
+    c.b = 0;
+    io.print("R=");
+    io.print(c.r);
+    io.print(" G=");
+    io.print(c.g);
+    io.print(" B=");
+    io.println(c.b);
+
+    struct_test.errorcode = 0;
+}

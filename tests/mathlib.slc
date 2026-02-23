@@ -1,0 +1,54 @@
+import std.io;
+import std.math;
+import std.main;
+
+main mathlib() {
+    // math.pwr(exp, base): base^exp
+    int p1 = math.pwr(2, 5);
+    io.print("5^2  = "); io.println(p1);
+
+    int p2 = math.pwr(3, 2);
+    io.print("2^3  = "); io.println(p2);
+
+    int p3 = math.pwr(10, 3);
+    io.print("3^10 = "); io.println(p3);
+
+    // math.sqrt(n)
+    int s1 = math.sqrt(25);
+    io.print("sqrt(25)  = "); io.println(s1);
+
+    int s2 = math.sqrt(144);
+    io.print("sqrt(144) = "); io.println(s2);
+
+    int s3 = math.sqrt(1000);
+    io.print("sqrt(1000) = "); io.println(s3);
+
+    // math.root(root, n): nth root of n
+    int r1 = math.root(3, 27);
+    io.print("cbrt(27)  = "); io.println(r1);
+
+    int r2 = math.root(4, 256);
+    io.print("4rt(256)  = "); io.println(r2);
+
+    int r3 = math.root(2, 81);
+    io.print("sqrt(81)  = "); io.println(r3);
+
+    // math.random(seed)
+    int rng1 = math.random(12345);
+    io.print("rand(12345)   = "); io.println(rng1);
+
+    int rng2 = math.random(99999);
+    io.print("rand(99999)   = "); io.println(rng2);
+
+    int rng3 = math.random(0);
+    io.print("rand(0=dflt)  = "); io.println(rng3);
+
+    // math results in expressions
+    int combined = math.sqrt(100) + math.pwr(2, 3);
+    io.print("sqrt(100)+2^3 = "); io.println(combined);
+
+    // math directly in print
+    io.print("2^8  = "); io.println(math.pwr(8, 2));
+
+    mathlib.errorcode = 0;
+}

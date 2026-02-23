@@ -1,0 +1,61 @@
+import std.io;
+import std.fs;
+import std.main;
+
+main fstest() {
+    // ── create files and directories ──
+    io.println("=== fs.create ===");
+    fs.create("/tmp/silica_hello.txt");
+    io.println("created: /tmp/silica_hello.txt");
+    fs.create("/tmp/silica_notes.txt");
+    io.println("created: /tmp/silica_notes.txt");
+    fs.create("/tmp/silica_mydir/");
+    io.println("created dir: /tmp/silica_mydir/");
+
+    // ── append content ──
+    io.println("=== fs.append ===");
+    fs.append("/tmp/silica_hello.txt", "Hello, Silica!\n");
+    fs.append("/tmp/silica_hello.txt", "This is line two.\n");
+    fs.append("/tmp/silica_hello.txt", "And this is line three.\n");
+    io.println("appended 3 lines to silica_hello.txt");
+
+    fs.append("/tmp/silica_notes.txt", "Note A\n");
+    fs.append("/tmp/silica_notes.txt", "Note B\n");
+    io.println("appended 2 lines to silica_notes.txt");
+
+    // ── read lines back ──
+    io.println("=== fs.read ===");
+    string l1 = fs.read("/tmp/silica_hello.txt", 1);
+    io.print("hello.txt line 1: "); io.println(l1);
+
+    string l2 = fs.read("/tmp/silica_hello.txt", 2);
+    io.print("hello.txt line 2: "); io.println(l2);
+
+    string l3 = fs.read("/tmp/silica_hello.txt", 3);
+    io.print("hello.txt line 3: "); io.println(l3);
+
+    string n1 = fs.read("/tmp/silica_notes.txt", 1);
+    io.print("notes.txt line 1: "); io.println(n1);
+
+    string n2 = fs.read("/tmp/silica_notes.txt", 2);
+    io.print("notes.txt line 2: "); io.println(n2);
+
+    // ── relative and home paths ──
+    io.println("=== paths ===");
+    fs.create("./silica_relative.txt");
+    fs.append("./silica_relative.txt", "written via relative path\n");
+    string rel = fs.read("./silica_relative.txt", 1);
+    io.print("relative path read: "); io.println(rel);
+    fs.delete("./silica_relative.txt");
+    io.println("deleted relative file");
+
+    // ── delete ──
+    io.println("=== fs.delete ===");
+    fs.delete("/tmp/silica_hello.txt");
+    io.println("deleted: silica_hello.txt");
+    fs.delete("/tmp/silica_notes.txt");
+    io.println("deleted: silica_notes.txt");
+
+    io.println("=== all fs tests passed ===");
+    fstest.errorcode = 0;
+}

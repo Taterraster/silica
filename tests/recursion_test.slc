@@ -1,0 +1,94 @@
+import std.io;
+import std.main;
+
+// Classic fibonacci
+int fib(int n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+// Factorial (tail-recursive-ish)
+int fact(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * fact(n - 1);
+}
+
+// Deep linear recursion — this would blow a fixed 512-byte frame
+// at depth ~100 since each frame needs space for locals
+int sum_down(int n) {
+    if (n <= 0) {
+        return 0;
+    }
+    int partial = sum_down(n - 1);
+    return n + partial;
+}
+
+// Count digits recursively
+int count_digits(int n) {
+    if (n < 10) {
+        return 1;
+    }
+    return 1 + count_digits(n / 10);
+}
+
+// Power by repeated squaring
+int power(int base, int exp) {
+    if (exp == 0) {
+        return 1;
+    }
+    if (exp == 1) {
+        return base;
+    }
+    int half = power(base, exp / 2);
+    int result = half * half;
+    if (exp % 2 == 1) {
+        result = result * base;
+    }
+    return result;
+}
+
+// GCD
+int gcd(int a, int b) {
+    if (b == 0) {
+        return a;
+    }
+    return gcd(b, a % b);
+}
+
+main recursion_test() {
+    // Fibonacci sequence
+    io.print("fib(10) = ");
+    io.println(fib(10));
+
+    // Factorial
+    io.print("10! = ");
+    io.println(fact(10));
+
+    // Deep recursion — sum 1..1000 (1000 stack frames)
+    io.print("sum(1000) = ");
+    io.println(sum_down(1000));
+
+    // Very deep — sum 1..5000
+    io.print("sum(5000) = ");
+    io.println(sum_down(5000));
+
+    // Digit counting
+    io.print("digits(123456789) = ");
+    io.println(count_digits(123456789));
+
+    // Power
+    io.print("2^20 = ");
+    io.println(power(2, 20));
+
+    // GCD
+    io.print("gcd(48, 18) = ");
+    io.println(gcd(48, 18));
+    io.print("gcd(100, 75) = ");
+    io.println(gcd(100, 75));
+
+    recursion_test.errorcode = 0;
+}

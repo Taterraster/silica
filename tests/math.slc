@@ -1,0 +1,48 @@
+import std.io;
+import std.main;
+
+main mathtest() {
+    // 1. no 'using std;' needed - io.print works directly
+    io.println("=== Feature Tests ===");
+
+    // 2. math in declaration
+    int a = 10 + 5;
+    int b = 3 * 4;
+    int c = 100 / 4;
+    int d = 17 % 5;
+
+    io.print("10 + 5   = "); io.println(a);
+    io.print("3 * 4    = "); io.println(b);
+    io.print("100 / 4  = "); io.println(c);
+    io.print("17 % 5   = "); io.println(d);
+
+    // 3. math directly in print
+    io.print("2 * (3 + 4) = ");
+    io.println(2 * (3 + 4));
+
+    io.print("100 - 37 = ");
+    io.println(100 - 37);
+
+    // 4. math using variables
+    int x = a + b;
+    io.print("a + b    = "); io.println(x);
+
+    int y = a * b - c;
+    io.print("a*b - c  = "); io.println(y);
+
+    // 5. redeclare variables with new values
+    int counter = 1;
+    io.print("counter  = "); io.println(counter);
+
+    int counter = 99;
+    io.print("counter  = "); io.println(counter);
+
+    int counter = counter + 1;
+    io.print("counter  = "); io.println(counter);
+
+    // 6. unary minus
+    int neg = -42;
+    io.print("-42      = "); io.println(neg);
+
+    mathtest.errorcode = 0;
+}

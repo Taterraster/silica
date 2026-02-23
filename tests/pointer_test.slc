@@ -1,0 +1,83 @@
+import std.io;
+import std.main;
+
+// Increment via pointer
+void increment(int* n) {
+    *n = *n + 1;
+}
+
+// Double a value via pointer
+void double_val(int* n) {
+    *n = *n * 2;
+}
+
+// Swap via pointers
+void swap(int* a, int* b) {
+    int tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+// Write two values via pointers
+void minmax(int a, int b, int* lo, int* hi) {
+    if (a < b) {
+        *lo = a;
+        *hi = b;
+    } else {
+        *lo = b;
+        *hi = a;
+    }
+}
+
+main pointer_test() {
+    // Basic address-of and deref
+    int x = 10;
+    int* p = &x;
+    io.print("x = ");
+    io.println(x);
+    io.print("*p = ");
+    io.println(*p);
+
+    // Write through pointer
+    *p = 42;
+    io.print("After *p=42, x = ");
+    io.println(x);
+
+    // Pass pointer to function — increment
+    int val = 5;
+    increment(&val);
+    io.print("After increment: ");
+    io.println(val);
+
+    // Double via pointer
+    double_val(&val);
+    io.print("After double: ");
+    io.println(val);
+
+    // Swap
+    int a = 100;
+    int b = 200;
+    swap(&a, &b);
+    io.print("After swap: a=");
+    io.print(a);
+    io.print(", b=");
+    io.println(b);
+
+    // Multiple output pointers
+    int lo = 0;
+    int hi = 0;
+    minmax(73, 29, &lo, &hi);
+    io.print("min=");
+    io.print(lo);
+    io.print(", max=");
+    io.println(hi);
+
+    // Chain: pointer to pointer target
+    int c = 7;
+    int* q = &c;
+    *q = *q * *q;
+    io.print("7^2 via ptr = ");
+    io.println(c);
+
+    pointer_test.errorcode = 0;
+}

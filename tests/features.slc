@@ -1,0 +1,107 @@
+import std.io;
+import std.str;
+import std.main;
+
+main features() {
+    // ── else if chains ──
+    io.println("=== else if ===");
+    int grade = 85;
+    if (grade >= 90) {
+        io.println("A");
+    } else if (grade >= 80) {
+        io.println("B");
+    } else if (grade >= 70) {
+        io.println("C");
+    } else {
+        io.println("F");
+    }
+
+    int x = 5;
+    if (x == 1) {
+        io.println("one");
+    } else if (x == 2) {
+        io.println("two");
+    } else if (x == 5) {
+        io.println("five");
+    } else {
+        io.println("other");
+    }
+
+    // ── break and continue ──
+    io.println("=== break/continue ===");
+    int i = 0;
+    loops.while(true) {
+        i = i + 1;
+        if (i == 3) { continue; }
+        io.println(i);
+        if (i == 5) { break; }
+    }
+
+    int sum = 0;
+    loops.for(10) {
+        sum = sum + 1;
+        if (sum == 7) { break; }
+    }
+    io.println(sum);
+
+    // ── arrays ──
+    io.println("=== arrays ===");
+    int[] nums = {10, 20, 30, 40, 50};
+    io.println(nums[0]);
+    io.println(nums[2]);
+    io.println(nums[4]);
+    nums[2] = 999;
+    io.println(nums[2]);
+
+    int[] fib = {1, 1, 2, 3, 5, 8, 13};
+    io.println(fib[6]);
+
+    // ── logical operators ──
+    io.println("=== logical ===");
+    bool t = true;
+    bool f = false;
+    io.println(t && f);
+    io.println(t || f);
+    io.println(!t);
+    io.println(!f);
+    io.println(t && t);
+    io.println(f || f);
+
+    int n = 7;
+    if (n > 5 && n < 10) { io.println("in range"); }
+    if (n < 5 || n > 6)  { io.println("out or over 6"); }
+    if (!(n == 0))        { io.println("nonzero"); }
+
+    // ── type casting ──
+    io.println("=== casting ===");
+    int iv = 42;
+    float fv = (float)iv;
+    io.println(fv);
+
+    float fv2 = 7.9;
+    int iv2 = (int)fv2;
+    io.println(iv2);
+
+    float pi = 3.14159;
+    int pi_int = (int)pi;
+    io.println(pi_int);
+
+    // ── string operations ──
+    io.println("=== strings ===");
+    string s1 = "Hello";
+    string s2 = ", World";
+    string s3 = str.concat(s1, s2);
+    io.println(s3);
+
+    io.println(str.length(s3));
+    io.println(str.length("abc"));
+
+    io.println(str.contains(s3, "World"));
+    io.println(str.contains(s3, "xyz"));
+    io.println(str.contains(s3, "Hello"));
+
+    string sl = str.slice(s3, 7, 5);
+    io.println(sl);
+
+    features.errorcode = 0;
+}

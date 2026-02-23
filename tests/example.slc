@@ -1,0 +1,22 @@
+import std.io;
+import std.mem;
+import std.main;
+using std;
+
+main myapp() {
+    // Allocate 2 KB of memory
+    mem.alloc(2, 1);
+
+    // Declare variables
+    int counter = 0;
+    char grade = 'A';
+    string message = "Welcome to Silica!";
+
+    // Print with and without newlines
+    io.println("Welcome to Silica!");
+    io.print("Language: ");
+    io.println("Silica v1.0");
+
+    // Set exit code
+    myapp.errorcode = 0;
+}

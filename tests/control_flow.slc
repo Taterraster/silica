@@ -1,0 +1,91 @@
+import std.io;
+import std.loops;
+import std.main;
+
+// ── overloaded functions ──
+int describe(int n) {
+    return n * 2;
+}
+
+int describe(int a, int b) {
+    return a + b;
+}
+
+void greet(string name) {
+    io.print("Hello, ");
+    io.println(name);
+}
+
+void greet(int n) {
+    io.print("Hello number ");
+    io.println(n);
+}
+
+main test() {
+    // ── if / else ──
+    io.println("=== if / else ===");
+    int x = 10;
+    if(x == 10) {
+        io.println("x is 10");
+    }
+    if(x < 3) {
+        io.println("WRONG");
+    } else {
+        io.println("x >= 3 (else branch)");
+    }
+    if(x > 3)  { io.println("x > 3"); }
+    if(x >= 10){ io.println("x >= 10"); }
+    if(x <= 9) { io.println("WRONG"); }
+    if(x != 5) { io.println("x != 5"); }
+
+    // ── loops.while(N) ──
+    io.println("=== while(3) ===");
+    loops.while(3) {
+        io.println("tick");
+    }
+
+    // ── loops.while(expr) ──
+    io.println("=== while(expr) ===");
+    int i = 0;
+    loops.while(i < 4) {
+        io.print("i = ");
+        io.println(i);
+        int i = i + 1;
+    }
+
+    // ── loops.while(true) with exit via variable ──
+    io.println("=== while(true) ===");
+    int alive = 1;
+    loops.while(alive) {
+        io.println("looping");
+        int alive = 0;
+    }
+
+    // ── loops.for(N) ──
+    io.println("=== for(4) ===");
+    loops.for(4) {
+        io.println("for-tick");
+    }
+
+    // ── loops.for(expr) ──
+    io.println("=== for(expr) ===");
+    int j = 3;
+    loops.for(j > 0) {
+        io.print("j = ");
+        io.println(j);
+        int j = j - 1;
+    }
+
+    // ── overloading ──
+    io.println("=== overloading ===");
+    int d1 = describe(5);
+    io.print("describe(5)   = "); io.println(d1);
+    int d2 = describe(3, 4);
+    io.print("describe(3,4) = "); io.println(d2);
+    string s = "World";
+    greet(s);
+    int n = 42;
+    greet(n);
+
+    test.errorcode = 0;
+}

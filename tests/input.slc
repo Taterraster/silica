@@ -1,0 +1,18 @@
+import std.io;
+import std.main;
+using std;
+
+main inputtest() {
+    string name;
+    string city;
+
+    io.inputln("Enter your name: ", name);
+    io.print("Hello, ");
+    io.println(name);
+
+    io.input("Enter your city: ", city);
+    io.print("You are from: ");
+    io.println(city);
+
+    inputtest.errorcode = 0;
+}

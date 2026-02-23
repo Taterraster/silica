@@ -1,0 +1,34 @@
+import std.io;
+import std.main;
+
+string getMessage() {
+    return "hello from function";
+}
+
+bool isEven(int n) {
+    return n % 2 == 0;
+}
+
+float getPI() {
+    return 3.14;
+}
+
+char getGrade() {
+    return 'A';
+}
+
+main test() {
+    string s = getMessage();
+    io.println(s);
+
+    bool b = isEven(4);
+    io.println(b);
+
+    float f = getPI();
+    io.println(f);
+
+    char c = getGrade();
+    io.println(c);
+
+    test.errorcode = 0;
+}

@@ -1,0 +1,42 @@
+import std.io;
+import std.main;
+using std;
+
+main allTypes() {
+    int    count  = 42;
+    long   big    = 1000000;
+    uint   u      = 255;
+    byte   b      = 200;
+    char   letter = 'Z';
+    bool   flag   = true;
+    float  pi     = 3.14;
+    string msg    = "Silica";
+
+    io.println("=== All Types ===");
+
+    io.print("int:    ");
+    io.println(count);
+
+    io.print("long:   ");
+    io.println(big);
+
+    io.print("uint:   ");
+    io.println(u);
+
+    io.print("byte:   ");
+    io.println(b);
+
+    io.print("char:   ");
+    io.println(letter);
+
+    io.print("bool:   ");
+    io.println(flag);
+
+    io.print("float:  ");
+    io.println(pi);
+
+    io.print("string: ");
+    io.println(msg);
+
+    allTypes.errorcode = 0;
+}

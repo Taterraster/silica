@@ -1,0 +1,13 @@
+import std.io;
+import mathutils;
+import std.main;
+
+main module_test() {
+    io.println("=== mathutils.slh library ===");
+    io.println(abs_val(-42));
+    io.println(min_val(10, 20));
+    io.println(max_val(10, 20));
+    io.println(clamp(150, 0, 100));
+    io.println(factorial(6));
+    module_test.errorcode = 0;
+}
