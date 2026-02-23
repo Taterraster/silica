@@ -74,6 +74,9 @@ typedef struct {
     /* struct type registry */
     StructDecl **structs;
     int          nstructs;
+    /* enum registry */
+    EnumDecl   **enums;
+    int          nenums;
     /* current function's return label and type */
     char       ret_label[64];
     VarType    cur_rettype;
@@ -317,8 +320,23 @@ static void emit_int_expr(CG *cg, Expr *e) {
                         fprintf(cg->out, "    movq -%d(%%rbp), %%rax\n", v->offset); break;
                 }
             } else {
-                fprintf(stderr, "[codegen] unknown variable '%s'\n", e->sval);
-                fprintf(cg->out, "    xorq %%rax, %%rax\n");
+                /* Check if it's an enum member constant */
+                int found_enum = 0;
+                /* Walk enum registry */
+                for (int ei = 0; ei < cg->nenums && !found_enum; ei++) {
+                    EnumDecl *ed = cg->enums[ei];
+                    for (int mi = 0; mi < ed->nmembers; mi++) {
+                        if (strcmp(ed->member_names[mi], e->sval) == 0) {
+                            fprintf(cg->out, "    movq $%ld, %%rax\n", ed->member_values[mi]);
+                            found_enum = 1;
+                            break;
+                        }
+                    }
+                }
+                if (!found_enum) {
+                    fprintf(stderr, "[codegen] unknown variable '%s'\n", e->sval);
+                    fprintf(cg->out, "    xorq %%rax, %%rax\n");
+                }
             }
             break;
         }
@@ -727,7 +745,24 @@ static void emit_call(CG *cg, Expr *e) {
             }
             case EXPR_IDENT: {
                 Var *v = find_var(cg, arg->sval);
-                if (!v) { fprintf(stderr, "[codegen] unknown var '%s'\n", arg->sval); break; }
+                if (!v) {
+                    /* check if it's an enum constant */
+                    int found_enum = 0;
+                    for (int ei = 0; ei < cg->nenums && !found_enum; ei++) {
+                        EnumDecl *ed = cg->enums[ei];
+                        for (int mi = 0; mi < ed->nmembers; mi++) {
+                            if (strcmp(ed->member_names[mi], arg->sval) == 0) {
+                                fprintf(cg->out, "    movq $%ld, %%rax\n", ed->member_values[mi]);
+                                emit_print_int(cg, nl);
+                                found_enum = 1;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found_enum)
+                        fprintf(stderr, "[codegen] unknown var '%s'\n", arg->sval);
+                    break;
+                }
                 switch (v->type) {
                     case TYPE_STRING:
                         emit_write_strvar(cg->out, v->offset);
@@ -865,28 +900,56 @@ static void emit_call(CG *cg, Expr *e) {
         return;
     }
 
-    /* ── mem.alloc ── */
+    /* ── mem.alloc(n, unit) → void* ── allocates n*unit bytes, returns pointer ── */
     if (strcmp(name, "std.mem.alloc") == 0) {
         if (e->argc < 2) return;
         long count = (e->args[0]->kind == EXPR_INT_LIT) ? e->args[0]->ival : 0;
         long unit  = (e->args[1]->kind == EXPR_INT_LIT) ? e->args[1]->ival : 0;
         long bytes = count;
         switch (unit) {
-            case 0: bytes = count;                      break;
-            case 1: bytes = count * 1024LL;             break;
-            case 2: bytes = count * 1024LL * 1024;      break;
-            case 3: bytes = count * 1024LL * 1024*1024; break;
+            case 0: bytes = count;                       break;
+            case 1: bytes = count * 1024LL;              break;
+            case 2: bytes = count * 1024LL * 1024;       break;
+            case 3: bytes = count * 1024LL * 1024 * 1024; break;
         }
         fprintf(cg->out,
-            "    /* mem.alloc(%ld, %ld) = %ld bytes */\n"
-            "    movq $12, %%rax\n"
+            "    /* mem.alloc(%ld, %ld) = %ld bytes → rax=ptr */\n"
+            "    movq $12, %%rax\n"          /* sys_brk(0) → current brk */
             "    xorq %%rdi, %%rdi\n"
             "    syscall\n"
+            "    movq %%rax, %%r12\n"        /* r12 = old brk = our ptr */
             "    movq %%rax, %%rdi\n"
             "    addq $%ld, %%rdi\n"
-            "    movq $12, %%rax\n"
-            "    syscall\n",
+            "    movq $12, %%rax\n"          /* sys_brk(new) → extend heap */
+            "    syscall\n"
+            "    movq %%r12, %%rax\n",       /* return old brk as the pointer */
             count, unit, bytes, bytes);
+        return;
+    }
+
+    /* ── mem.alloc_raw(bytes) → void* ── allocates exactly N bytes, returns pointer ── */
+    if (strcmp(name, "std.mem.alloc_raw") == 0) {
+        if (e->argc < 1) return;
+        fprintf(cg->out, "    /* mem.alloc_raw(n) → rax=ptr */\n");
+        emit_int_expr(cg, e->args[0]);          /* rax = n */
+        fprintf(cg->out,
+            "    movq %%rax, %%r13\n"            /* r13 = n */
+            "    movq $12, %%rax\n"
+            "    xorq %%rdi, %%rdi\n"
+            "    syscall\n"                      /* rax = old brk */
+            "    movq %%rax, %%r12\n"            /* r12 = ptr */
+            "    movq %%rax, %%rdi\n"
+            "    addq %%r13, %%rdi\n"
+            "    movq $12, %%rax\n"
+            "    syscall\n"
+            "    movq %%r12, %%rax\n");          /* return ptr */
+        return;
+    }
+
+    /* ── mem.free(ptr) ── no-op stub (brk allocator has no free) ── */
+    if (strcmp(name, "std.mem.free") == 0) {
+        fprintf(cg->out, "    /* mem.free: no-op (brk allocator) */\n");
+        if (e->argc > 0) emit_int_expr(cg, e->args[0]); /* evaluate for side effects */
         return;
     }
 
@@ -1356,7 +1419,164 @@ static void emit_call(CG *cg, Expr *e) {
         return;
     }
 
-    /* ── std.fs.read(path, line) ── read line N from file → rax=ptr, rdx=len ── */
+    /* ── std.fs.open(path, mode) → int fd ──
+     *   mode: 0=read, 1=write(trunc), 2=write(append)
+     *   Returns fd on success, -1 on failure.
+     */
+    if (strcmp(name, "std.fs.open") == 0) {
+        if (e->argc < 2) { fprintf(stderr, "[codegen] fs.open needs 2 args: (path, mode)\n"); return; }
+        int lbl = cg->lbl_counter++;
+        /* evaluate mode → r13 */
+        emit_int_expr(cg, e->args[1]);
+        fprintf(cg->out, "    movq %%rax, %%r13\n"); /* r13 = mode */
+        /* evaluate path, null-terminate */
+        emit_init_expr(cg, TYPE_STRING, e->args[0]);
+        fprintf(cg->out,
+            "    /* fs.open: null-terminate path */\n"
+            "    movq %%rax, %%rsi\n"
+            "    movq %%rdx, %%rcx\n"
+            "    subq $4096, %%rsp\n"
+            "    movq %%rsp, %%rdi\n"
+            "    pushq %%rdi\n"
+            "    rep movsb\n"
+            "    movb $0, (%%rdi)\n"
+            "    popq %%rdi\n"                  /* rdi = path */
+            /* select flags based on mode */
+            "    testq %%r13, %%r13\n"
+            "    jnz .Lfsopen_write%d\n"
+            /* mode 0: O_RDONLY */
+            "    movq $2, %%rax\n"              /* sys_open */
+            "    xorq %%rsi, %%rsi\n"           /* O_RDONLY=0 */
+            "    xorq %%rdx, %%rdx\n"
+            "    syscall\n"
+            "    jmp .Lfsopen_done%d\n"
+            ".Lfsopen_write%d:\n"
+            "    cmpq $2, %%r13\n"
+            "    je .Lfsopen_append%d\n"
+            /* mode 1: O_WRONLY|O_CREAT|O_TRUNC */
+            "    movq $2, %%rax\n"
+            "    movq $0101, %%rsi\n"
+            "    orq  $01000, %%rsi\n"
+            "    movq $0644, %%rdx\n"
+            "    syscall\n"
+            "    jmp .Lfsopen_done%d\n"
+            ".Lfsopen_append%d:\n"
+            /* mode 2: O_WRONLY|O_CREAT|O_APPEND */
+            "    movq $2, %%rax\n"
+            "    movq $01, %%rsi\n"
+            "    orq  $0100, %%rsi\n"
+            "    orq  $02000, %%rsi\n"
+            "    movq $0644, %%rdx\n"
+            "    syscall\n"
+            ".Lfsopen_done%d:\n"
+            "    addq $4096, %%rsp\n"
+            "    /* fd in rax, negative = error */\n",
+            lbl, lbl, lbl, lbl, lbl, lbl, lbl);
+        return;
+    }
+
+    /* ── std.fs.close(fd) ── */
+    if (strcmp(name, "std.fs.close") == 0) {
+        if (e->argc < 1) { fprintf(stderr, "[codegen] fs.close needs 1 arg: (fd)\n"); return; }
+        emit_int_expr(cg, e->args[0]);
+        fprintf(cg->out,
+            "    /* fs.close(fd) */\n"
+            "    movq %%rax, %%rdi\n"
+            "    movq $3, %%rax\n"              /* sys_close */
+            "    syscall\n");
+        return;
+    }
+
+    /* ── std.fs.write(fd, content) → int bytes_written ── */
+    if (strcmp(name, "std.fs.write") == 0) {
+        if (e->argc < 2) { fprintf(stderr, "[codegen] fs.write needs 2 args: (fd, content)\n"); return; }
+        /* evaluate content first */
+        emit_init_expr(cg, TYPE_STRING, e->args[1]);
+        fprintf(cg->out,
+            "    /* fs.write: save content ptr+len, load fd */\n"
+            "    pushq %%rax\n"                 /* content ptr */
+            "    pushq %%rdx\n");               /* content len */
+        emit_int_expr(cg, e->args[0]);          /* rax = fd */
+        fprintf(cg->out,
+            "    movq %%rax, %%rdi\n"           /* rdi = fd */
+            "    movq 8(%%rsp), %%rsi\n"        /* rsi = ptr */
+            "    movq 0(%%rsp), %%rdx\n"        /* rdx = len */
+            "    movq $1, %%rax\n"              /* sys_write */
+            "    syscall\n"
+            "    addq $16, %%rsp\n"
+            "    /* rax = bytes written */\n");
+        return;
+    }
+
+    /* ── std.fs.read_all(fd) → string ── reads entire file into heap buffer ── */
+    if (strcmp(name, "std.fs.read_all") == 0) {
+        if (e->argc < 1) { fprintf(stderr, "[codegen] fs.read_all needs 1 arg: (fd)\n"); return; }
+        int lbl = cg->lbl_counter++;
+        emit_int_expr(cg, e->args[0]);          /* rax = fd */
+        fprintf(cg->out,
+            "    /* fs.read_all(fd): heap buffer, read 4096 bytes at a time */\n"
+            "    movq %%rax, %%r15\n"           /* r15 = fd */
+            /* allocate 65536-byte initial buffer via brk */
+            "    movq $12, %%rax\n"
+            "    xorq %%rdi, %%rdi\n"
+            "    syscall\n"
+            "    movq %%rax, %%r12\n"           /* r12 = buf base */
+            "    movq %%rax, %%rdi\n"
+            "    addq $65536, %%rdi\n"
+            "    movq $12, %%rax\n"
+            "    syscall\n"
+            "    xorq %%r13, %%r13\n"           /* r13 = total bytes read */
+            /* read loop */
+            ".Lfsreadall_loop%d:\n"
+            "    movq %%r15, %%rdi\n"           /* fd */
+            "    movq %%r12, %%rsi\n"
+            "    addq %%r13, %%rsi\n"           /* buf + offset */
+            "    movq $4096, %%rdx\n"
+            "    movq $0, %%rax\n"              /* sys_read */
+            "    syscall\n"
+            "    testq %%rax, %%rax\n"
+            "    jle .Lfsreadall_done%d\n"
+            "    addq %%rax, %%r13\n"
+            "    jmp .Lfsreadall_loop%d\n"
+            ".Lfsreadall_done%d:\n"
+            "    movq %%r12, %%rax\n"           /* rax = ptr */
+            "    movq %%r13, %%rdx\n",          /* rdx = total len */
+            lbl, lbl, lbl, lbl);
+        return;
+    }
+
+    /* ── std.fs.size(path) → int bytes ── */
+    if (strcmp(name, "std.fs.size") == 0) {
+        if (e->argc < 1) { fprintf(stderr, "[codegen] fs.size needs 1 arg: (path)\n"); return; }
+        int lbl = cg->lbl_counter++;
+        emit_init_expr(cg, TYPE_STRING, e->args[0]);
+        fprintf(cg->out,
+            "    /* fs.size: stat(path) → st_size */\n"
+            "    movq %%rax, %%rsi\n"
+            "    movq %%rdx, %%rcx\n"
+            "    subq $4096, %%rsp\n"
+            "    movq %%rsp, %%rdi\n"
+            "    pushq %%rdi\n"
+            "    rep movsb\n"
+            "    movb $0, (%%rdi)\n"
+            "    popq %%rdi\n"                  /* rdi = null-term path */
+            /* allocate stat buffer (144 bytes on x86-64) */
+            "    subq $152, %%rsp\n"
+            "    movq %%rsp, %%rsi\n"           /* rsi = &statbuf */
+            "    movq $4, %%rax\n"              /* sys_stat */
+            "    syscall\n"
+            "    testq %%rax, %%rax\n"
+            "    js .Lfssize_fail%d\n"
+            "    movq 48(%%rsp), %%rax\n"       /* st_size offset = 48 in struct stat */
+            "    jmp .Lfssize_done%d\n"
+            ".Lfssize_fail%d:\n"
+            "    movq $-1, %%rax\n"
+            ".Lfssize_done%d:\n"
+            "    addq $152, %%rsp\n"
+            "    addq $4096, %%rsp\n",
+            lbl, lbl, lbl, lbl);
+        return;
+    }
     if (strcmp(name, "std.fs.read") == 0) {
         if (e->argc < 2) { fprintf(stderr, "[codegen] fs.read needs 2 args: (path, line)\n"); return; }
         int lbl = cg->lbl_counter++;
@@ -2494,6 +2714,13 @@ static void emit_store_var(CG *cg, Var *v) {
                 v->offset, v->offset - 8);
             break;
         case TYPE_VOID: break;
+        case TYPE_PTR:
+        case TYPE_VOID_PTR:
+            fprintf(cg->out, "    movq %%rax, -%d(%%rbp)\n", v->offset);
+            break;
+        default:
+            fprintf(cg->out, "    movq %%rax, -%d(%%rbp)\n", v->offset);
+            break;
     }
 }
 
@@ -2554,6 +2781,13 @@ static void emit_init_expr(CG *cg, VarType dtype, Expr *src) {
             break;
 
         case TYPE_VOID: break;
+        case TYPE_PTR:
+        case TYPE_VOID_PTR:
+            emit_int_expr(cg, src);   /* → rax (address) */
+            break;
+        default:
+            emit_int_expr(cg, src);
+            break;
     }
 }
 
@@ -2597,9 +2831,10 @@ static void emit_stmt(CG *cg, Stmt *s) {
                 break;
             }
 
-            /* pointer variable: int* p = &x; */
-            if (s->is_ptr) {
-                int idx = alloc_var(cg, s->varname, TYPE_PTR, s->is_const);
+            /* pointer variable: int* p = &x;  /  void* p = mem.alloc(...) */
+            if (s->is_ptr || s->vtype == TYPE_VOID_PTR) {
+                VarType slot_type = (s->vtype == TYPE_VOID_PTR) ? TYPE_VOID_PTR : TYPE_PTR;
+                int idx = alloc_var(cg, s->varname, slot_type, s->is_const);
                 Var *v  = &cg->vars[idx];
                 /* keep struct_name for ptr-to-struct */
                 if (s->struct_name) v->struct_name = strdup(s->struct_name);
@@ -3327,6 +3562,8 @@ static void emit_func(FuncDecl *fd, FILE *out, CG *parent_cg) {
     cg.nfuncs      = parent_cg->nfuncs;
     cg.structs     = parent_cg->structs;
     cg.nstructs    = parent_cg->nstructs;
+    cg.enums       = parent_cg->enums;
+    cg.nenums      = parent_cg->nenums;
 
     /* unique return label */
     snprintf(cg.ret_label, sizeof(cg.ret_label), ".Lret_%s_%d",
@@ -3355,13 +3592,21 @@ static void emit_func(FuncDecl *fd, FILE *out, CG *parent_cg) {
     if (frame_bytes < 128) frame_bytes = 128;
 
     fprintf(out,
-        "\n# ── user function: %s (params=%d, frame=%d) ──\n"
-        ".global %s\n"
+        "\n# ── user function: %s (params=%d, frame=%d%s%s) ──\n",
+        fd->name, fd->nparams, frame_bytes,
+        fd->is_static ? ", static" : "",
+        fd->is_inline ? ", inline" : "");
+
+    /* static and inline functions have local linkage — no .global directive */
+    if (!fd->is_static && !fd->is_inline)
+        fprintf(out, ".global %s\n", sym);
+
+    fprintf(out,
         "%s:\n"
         "    pushq %%rbp\n"
         "    movq  %%rsp, %%rbp\n"
         "    subq  $%d, %%rsp\n",
-        fd->name, fd->nparams, frame_bytes, sym, sym, frame_bytes);
+        sym, frame_bytes);
 
     /* spill register args into local stack slots.
      * Strings take 2 registers: first reg=ptr, second reg=len.
@@ -3435,6 +3680,8 @@ int codegen_emit(Program *prog, FILE *out) {
     cg.nfuncs    = prog->nfuncs;
     cg.structs   = prog->structs;
     cg.nstructs  = prog->nstructs;
+    cg.enums     = prog->enums;
+    cg.nenums    = prog->nenums;
 
     /* scan imports to enable stdlib modules — every module must be imported */
     for (int i = 0; i < prog->nimports; i++) {
@@ -3451,7 +3698,7 @@ int codegen_emit(Program *prog, FILE *out) {
     }
 
     fprintf(out,
-        "# Silica compiled output -- made with\n"
+        "# Silica compiled output -- x86-64 Linux, no libc\n"
         ".section .text\n");
 
     /* emit user-defined functions */

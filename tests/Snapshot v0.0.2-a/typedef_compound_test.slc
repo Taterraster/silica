@@ -1,0 +1,70 @@
+import std.io;
+import std.main;
+
+// ── typedef struct with inline body ──────────────────────────
+typedef struct Vec2 {
+    int x;
+    int y;
+} Vec2;
+
+typedef struct {
+    int r;
+    int g;
+    int b;
+} Color;
+
+// ── typedef enum with inline body ────────────────────────────
+typedef enum {
+    NODE_INT = 0,
+    NODE_STR,
+    NODE_BOOL,
+} NodeKind;
+
+// ── typedef enum with name ───────────────────────────────────
+typedef enum Status {
+    OK = 0,
+    ERR = 1,
+} Status;
+
+// ── forward-ref typedef (struct name → alias) ─────────────────
+struct Point { int x; int y; }
+typedef struct Point Point;
+
+int vec2_len_sq(Vec2 v) {
+    return v.x * v.x + v.y * v.y;
+}
+
+main typedef_compound_test() {
+    io.println("=== typedef struct/enum compound test ===");
+
+    Vec2 v;
+    v.x = 3;
+    v.y = 4;
+    io.print("v.x="); io.print(v.x);
+    io.print(" v.y="); io.println(v.y);
+    io.print("len_sq(v) = "); io.println(vec2_len_sq(v));
+
+    Color c;
+    c.r = 255;
+    c.g = 128;
+    c.b = 0;
+    io.print("color r="); io.print(c.r);
+    io.print(" g="); io.print(c.g);
+    io.print(" b="); io.println(c.b);
+
+    int kind = NODE_STR;
+    io.print("NODE_STR = "); io.println(kind);
+    io.print("NODE_BOOL = "); io.println(NODE_BOOL);
+
+    int st = OK;
+    io.print("OK = "); io.println(st);
+    io.print("ERR = "); io.println(ERR);
+
+    Point pt;
+    pt.x = 10;
+    pt.y = 20;
+    io.print("point x="); io.print(pt.x);
+    io.print(" y="); io.println(pt.y);
+
+    typedef_compound_test.errorcode = 0;
+}

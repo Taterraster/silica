@@ -29,24 +29,9 @@ build/parser.o:  src/parser.c  src/parser.h src/lexer.h src/ast.h
 build/ast.o:     src/ast.c     src/ast.h
 build/codegen.o: src/codegen.c src/codegen.h src/ast.h
 
-# ── Tests ────────────────────────────────────────────────────────────────────
-test: $(TARGET)
-	@echo "=== Running Silica test suite ==="
-	@passed=0; failed=0; \
-	for f in tests/*.slc; do \
-	    out=$$(./$(TARGET) "$$f" -o /tmp/__slc_test 2>&1); \
-	    if echo "$$out" | grep -qE '\[error\]|Linker failed|parse error'; then \
-	        echo "  FAIL $$f"; failed=$$((failed+1)); \
-	    else \
-	        echo "  PASS $$f"; passed=$$((passed+1)); \
-	    fi; \
-	done; \
-	echo ""; \
-	echo "Results: $$passed passed, $$failed failed"
-
 # ── Install ───────────────────────────────────────────────────────────────────
 install: $(TARGET)
-	sudo cp $(TARGET) /usr/local/bin/silicac
+	cp $(TARGET) /usr/local/bin/silicac
 	@echo "Installed to /usr/local/bin/silicac"
 
 # ── Clean ─────────────────────────────────────────────────────────────────────

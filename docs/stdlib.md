@@ -304,28 +304,76 @@ fs.create("/tmp/myfile.txt");
 fs.create("/tmp/mydir/");
 ```
 
+### fs.open(path, mode) → `int`
+
+Opens a file and returns a file descriptor. `mode`:
+- `0` — read-only
+- `1` — write (creates/truncates)
+- `2` — append (creates if absent)
+
+Returns a non-negative fd on success, negative on failure:
+
+```silica
+int fd = fs.open("/tmp/myfile.txt", 1);
+if (fd < 0) { io.println("open failed"); }
+```
+
+### fs.close(fd)
+
+Closes a file descriptor:
+
+```silica
+fs.close(fd);
+```
+
+### fs.write(fd, content) → `int`
+
+Writes string `content` to file descriptor `fd`. Returns the number of bytes written:
+
+```silica
+int n = fs.write(fd, "Hello, file!\n");
+io.println(n);   // 13
+```
+
+### fs.read_all(fd) → `string`
+
+Reads the entire contents of a file descriptor into a heap-allocated string:
+
+```silica
+int fd = fs.open("/tmp/myfile.txt", 0);
+string contents = fs.read_all(fd);
+io.println(contents);
+fs.close(fd);
+```
+
+### fs.size(path) → `int`
+
+Returns the size of the file at `path` in bytes. Returns `-1` if the file doesn't exist:
+
+```silica
+int sz = fs.size("/tmp/myfile.txt");
+io.println(sz);
+```
+
 ### fs.append(path, content)
 
-Appends `content` to the file at `path`:
+Appends `content` to the file at `path` (convenience wrapper — opens, writes, closes):
 
 ```silica
 fs.append("/tmp/myfile.txt", "Hello, Silica!\n");
-fs.append("/tmp/myfile.txt", "Line two.\n");
 ```
 
-### fs.read(path, line)
+### fs.read(path, line) → `string`
 
-Returns the `line`-th line of the file at `path` (1-based). Returns an empty string if the line doesn't exist:
+Returns the `line`-th line of the file at `path` (1-based):
 
 ```silica
 string first = fs.read("/tmp/myfile.txt", 1);
-string second = fs.read("/tmp/myfile.txt", 2);
-io.println(first);
 ```
 
 ### fs.delete(path)
 
-Deletes the file or empty directory at `path`:
+Deletes the file at `path`:
 
 ```silica
 fs.delete("/tmp/myfile.txt");
@@ -339,16 +387,42 @@ fs.delete("/tmp/myfile.txt");
 
 Raw memory allocation via `sys_brk`.
 
-### mem.alloc(n, unit)
+### mem.alloc(n, unit) → `void*`
 
-Allocates `n * unit` bytes of heap memory. `unit` is typically `1` (bytes) or `1024` (KB):
+Allocates `n * unit` bytes of heap memory and **returns a pointer** to the allocated region. `unit` is typically `0` (bytes), `1` (KB), `2` (MB), or `3` (GB):
 
 ```silica
-mem.alloc(2, 1);      // allocate 2 bytes
-mem.alloc(4, 1024);   // allocate 4 KB
+void* buf  = mem.alloc(256, 0);    // 256 bytes
+void* kb   = mem.alloc(4, 1);      // 4 KB
+void* big  = mem.alloc(1, 2);      // 1 MB
 ```
 
-Currently returns no pointer — this is used to pre-extend the heap before manual array operations. Arrays declared with `int[]` use `mem.alloc` internally.
+The returned pointer is a valid heap address. It can be stored in a `void*` variable, compared, or cast to a typed pointer:
+
+```silica
+void* buf = mem.alloc(64, 0);
+int* iptr = buf;
+*iptr = 42;
+```
+
+### mem.alloc_raw(bytes) → `void*`
+
+Allocates exactly `bytes` bytes and returns a pointer. More convenient when the byte count is a variable:
+
+```silica
+int size = 1024;
+void* buf = mem.alloc_raw(size);
+```
+
+### mem.free(ptr)
+
+Accepts any pointer. Currently a no-op — the `sys_brk` allocator does not support freeing individual regions. Included for forward compatibility:
+
+```silica
+void* buf = mem.alloc(256, 0);
+// ... use buf ...
+mem.free(buf);   // no-op, safe to call
+```
 
 ---
 

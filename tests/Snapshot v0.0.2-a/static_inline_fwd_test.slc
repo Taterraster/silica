@@ -1,0 +1,61 @@
+import std.io;
+import std.main;
+
+// ── Forward declarations ──────────────────────────────────────
+int add(int a, int b);
+string greet(string name);
+
+// ── Static function (local linkage, no .global) ──────────────
+static int secret_mul(int a, int b) {
+    return a * b;
+}
+
+// ── Inline function (local linkage) ──────────────────────────
+inline int clamp(int val, int lo, int hi) {
+    if (val < lo) { return lo; }
+    if (val > hi) { return hi; }
+    return val;
+}
+
+// ── Static inline combo ───────────────────────────────────────
+static inline int square(int n) {
+    return n * n;
+}
+
+// ── Definitions matching forward declarations ─────────────────
+int add(int a, int b) {
+    return a + b;
+}
+
+string greet(string name) {
+    return name;
+}
+
+main static_inline_fwd_test() {
+    io.println("=== static / inline / forward-decl test ===");
+
+    // forward-declared functions
+    int s = add(10, 32);
+    io.print("add(10, 32) = "); io.println(s);
+
+    string msg = greet("Silica");
+    io.print("greet = "); io.println(msg);
+
+    // static function
+    int m = secret_mul(6, 7);
+    io.print("secret_mul(6,7) = "); io.println(m);
+
+    // inline function
+    int c1 = clamp(5,  0, 10);
+    int c2 = clamp(-3, 0, 10);
+    int c3 = clamp(99, 0, 10);
+    io.print("clamp(5,0,10)  = "); io.println(c1);
+    io.print("clamp(-3,0,10) = "); io.println(c2);
+    io.print("clamp(99,0,10) = "); io.println(c3);
+
+    // static inline
+    int sq = square(9);
+    io.print("square(9) = "); io.println(sq);
+
+    static_inline_fwd_test.errorcode = 0;
+}

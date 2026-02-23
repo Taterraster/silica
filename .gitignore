@@ -1,4 +1,3 @@
-build/
-tests/*.s
-tests/*.o
-
+tests/**
+!tests/**/
+!tests/**/*.slc

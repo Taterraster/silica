@@ -1,0 +1,30 @@
+import std.io;
+import std.main;
+
+typedef int i64;
+typedef bool flag_t;
+typedef float real_t;
+
+int add_i64(i64 a, i64 b) {
+    return a + b;
+}
+
+main typedef_test() {
+    io.println("=== typedef test ===");
+
+    i64 x = 100;
+    i64 y = 200;
+    io.print("x = "); io.println(x);
+    io.print("y = "); io.println(y);
+    io.print("x + y = "); io.println(add_i64(x, y));
+
+    flag_t done = false;
+    io.print("done = "); io.println(done);
+    flag_t done = true;
+    io.print("done = "); io.println(done);
+
+    real_t pi = 3.14;
+    io.print("pi = "); io.println(pi);
+
+    typedef_test.errorcode = 0;
+}

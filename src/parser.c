@@ -67,11 +67,26 @@ static int parse_type_kw(Parser *p, VarType *out) {
         case TOK_LONG:   *out = TYPE_LONG;   break;
         case TOK_BYTE:   *out = TYPE_BYTE;   break;
         case TOK_UINT:   *out = TYPE_UINT;   break;
-        case TOK_VOID:   *out = TYPE_VOID;   break;
-        /* IDENT as struct type name — only when next token is IDENT or * (not . or () */
+        case TOK_VOID:
+            /* void* is a generic pointer; plain void is return type only */
+            if (p->nxt.type == TOK_STAR) {
+                *out = TYPE_VOID_PTR;
+                adv(p); /* consume 'void' */
+                adv(p); /* consume '*'    */
+                return 1;
+            }
+            *out = TYPE_VOID; break;
+        /* IDENT as struct/typedef/enum type name — only when next token is IDENT or * (not . or () */
         case TOK_IDENT:
             if (p->nxt.type == TOK_IDENT || p->nxt.type == TOK_STAR) {
-                *out = TYPE_STRUCT;
+                /* check if it's a typedef alias — resolve to underlying type */
+                *out = TYPE_STRUCT; /* default: treat as named type */
+                for (int i = 0; i < p->ntypedefs; i++) {
+                    if (strcmp(p->typedefs[i]->alias, p->cur.value) == 0) {
+                        *out = p->typedefs[i]->base_type;
+                        break;
+                    }
+                }
                 break;
             }
             return 0;
@@ -403,6 +418,12 @@ static Stmt *parse_stmt(Parser *p) {
         expect(p, TOK_IDENT);
     }
 
+    /* Capture IDENT-based type name before parse_type_kw consumes it.
+     * This covers typedef alias names (e.g. Vec2 v;) and plain struct names. */
+    if (!is_struct_decl && cur(p)->type == TOK_IDENT) {
+        strncpy(struct_type_name, cur(p)->value, sizeof(struct_type_name)-1);
+    }
+
     VarType vt;
     int is_decl = is_struct_decl ? 1 : parse_type_kw(p, &vt);
     if (is_struct_decl) vt = TYPE_STRUCT;
@@ -453,8 +474,19 @@ static Stmt *parse_stmt(Parser *p) {
         s->is_const = is_const;
         s->is_array = is_array;
         s->is_ptr   = is_ptr;
-        if (is_struct_decl || vt == TYPE_STRUCT)
-            s->struct_name = strdup(struct_type_name);
+        if (is_struct_decl || vt == TYPE_STRUCT) {
+            /* resolve typedef alias → underlying struct name if needed */
+            const char *resolved_name = struct_type_name;
+            for (int i = 0; i < p->ntypedefs; i++) {
+                if (strcmp(p->typedefs[i]->alias, struct_type_name) == 0
+                        && p->typedefs[i]->base_type == TYPE_STRUCT
+                        && p->typedefs[i]->base_name) {
+                    resolved_name = p->typedefs[i]->base_name;
+                    break;
+                }
+            }
+            s->struct_name = strdup(resolved_name);
+        }
         if (check(p, TOK_ASSIGN)) {
             adv(p);
             s->init = parse_expr(p);
@@ -540,12 +572,40 @@ static void parse_using(Parser *p, Program *prog) {
 
 static void parse_struct(Parser *p, Program *prog) {
     adv(p); /* consume 'struct' */
-    char *sname = strdup(cur(p)->value);
-    expect(p, TOK_IDENT);
+
+    /* Anonymous or named struct */
+    char *sname = NULL;
+    if (check(p, TOK_IDENT)) {
+        sname = strdup(cur(p)->value);
+        adv(p);
+    }
+
+    /* If there is no body (just a type reference like "struct Foo Bar;"),
+     * the caller handles it — we should not be called in that case.
+     * But if the next token is NOT '{' we have a forward-decl struct type name:
+     * nothing to parse as a declaration here. */
+    if (!check(p, TOK_LBRACE)) {
+        /* This was called speculatively and is just a struct type reference —
+         * put the name back by synthesising: treat as no-op.
+         * In practice parser_parse only calls us when TOK_STRUCT is the lookahead
+         * and we consumed it already.  Emit an error to be safe. */
+        if (!sname) {
+            fprintf(stderr, "[parser] %d:%d: expected struct name or '{'\n",
+                    cur(p)->line, cur(p)->col);
+            p->errors++;
+            free(sname);
+            return;
+        }
+        /* forward declaration — nothing to register, skip optional ; */
+        match(p, TOK_SEMICOLON);
+        free(sname);
+        return;
+    }
+
     expect(p, TOK_LBRACE);
 
     StructDecl *sd = structdecl_new();
-    sd->name = sname;
+    sd->name = sname ? sname : strdup("__anon");
     int fcap = 8;
     sd->fields = malloc(fcap * sizeof(StructField));
 
@@ -574,7 +634,7 @@ static void parse_struct(Parser *p, Program *prog) {
         expect(p, TOK_IDENT);
         expect(p, TOK_SEMICOLON);
 
-        int sz = (ftype == TYPE_STRUCT) ? 8 : 8; /* all fields are 8 bytes for now */
+        int sz = 8; /* all fields are 8 bytes */
         (void)is_ptr;
         sd->fields[sd->nfields].type        = ftype;
         sd->fields[sd->nfields].name        = fname;
@@ -584,11 +644,269 @@ static void parse_struct(Parser *p, Program *prog) {
         offset += sz;
     }
     expect(p, TOK_RBRACE);
-    match(p, TOK_SEMICOLON); /* optional trailing ; after struct body */
     sd->total_size = offset;
+
+    /* Optional typedef alias: typedef struct Foo { ... } Bar; */
+    if (check(p, TOK_IDENT)) {
+        sd->typedef_name = strdup(cur(p)->value);
+        /* Register the alias as a typedef pointing at this struct */
+        TypedefDecl *td = typedefdecl_new();
+        td->alias     = strdup(cur(p)->value);
+        td->base_type = TYPE_STRUCT;
+        td->base_name = strdup(sd->name);
+        if (p->ntypedefs < 128) p->typedefs[p->ntypedefs++] = td;
+        prog->typedefs = realloc(prog->typedefs, (prog->ntypedefs + 1) * sizeof(TypedefDecl *));
+        prog->typedefs[prog->ntypedefs++] = td;
+        adv(p);
+    }
+    match(p, TOK_SEMICOLON); /* optional trailing ; */
 
     prog->structs = realloc(prog->structs, (prog->nstructs+1)*sizeof(StructDecl*));
     prog->structs[prog->nstructs++] = sd;
+}
+
+static void parse_enum(Parser *p, Program *prog) {
+    adv(p); /* consume 'enum' */
+
+    char *ename = NULL;
+    if (check(p, TOK_IDENT)) {
+        ename = strdup(cur(p)->value);
+        adv(p);
+    }
+
+    /* If no body — forward declaration, skip */
+    if (!check(p, TOK_LBRACE)) {
+        match(p, TOK_SEMICOLON);
+        free(ename);
+        return;
+    }
+    expect(p, TOK_LBRACE);
+
+    EnumDecl *ed = enumdecl_new();
+    ed->name = ename ? ename : strdup("__anon_enum");
+    int cap = 8;
+    ed->member_names  = malloc(cap * sizeof(char *));
+    ed->member_values = malloc(cap * sizeof(long));
+
+    long next_val = 0;
+    while (!check(p, TOK_RBRACE) && !check(p, TOK_EOF)) {
+        if (ed->nmembers >= cap) {
+            ed->member_names  = realloc(ed->member_names,  (cap *= 2) * sizeof(char *));
+            ed->member_values = realloc(ed->member_values, cap * sizeof(long));
+        }
+        ed->member_names[ed->nmembers] = strdup(cur(p)->value);
+        expect(p, TOK_IDENT);
+        /* optional = value */
+        if (check(p, TOK_ASSIGN)) {
+            adv(p);
+            /* support negative literals */
+            int neg = 0;
+            if (check(p, TOK_MINUS)) { adv(p); neg = 1; }
+            long v = atol(cur(p)->value);
+            if (neg) v = -v;
+            expect(p, TOK_INT_LIT);
+            next_val = v;
+        }
+        ed->member_values[ed->nmembers] = next_val++;
+        ed->nmembers++;
+        match(p, TOK_COMMA); /* optional comma between members */
+    }
+    expect(p, TOK_RBRACE);
+
+    /* Optional typedef alias: typedef enum Foo { ... } Bar; */
+    if (check(p, TOK_IDENT)) {
+        TypedefDecl *td = typedefdecl_new();
+        td->alias     = strdup(cur(p)->value);
+        td->base_type = TYPE_INT; /* enums are ints */
+        td->base_name = strdup(ed->name);
+        if (p->ntypedefs < 128) p->typedefs[p->ntypedefs++] = td;
+        prog->typedefs = realloc(prog->typedefs, (prog->ntypedefs + 1) * sizeof(TypedefDecl *));
+        prog->typedefs[prog->ntypedefs++] = td;
+        adv(p);
+    }
+    match(p, TOK_SEMICOLON);
+
+    prog->enums = realloc(prog->enums, (prog->nenums + 1) * sizeof(EnumDecl *));
+    prog->enums[prog->nenums++] = ed;
+
+    /* register in parser for identifier recognition */
+    if (p->nenums < 128)
+        p->enums[p->nenums++] = ed;
+}
+
+static void parse_typedef(Parser *p, Program *prog) {
+    adv(p); /* consume 'typedef' */
+
+    /* ── typedef struct ... or typedef enum ... ── */
+    if (check(p, TOK_STRUCT) || check(p, TOK_ENUM)) {
+        int is_enum = check(p, TOK_ENUM);
+        adv(p); /* consume 'struct' or 'enum' */
+
+        /* Read optional name */
+        char name_buf[256] = "";
+        if (check(p, TOK_IDENT) && p->nxt.type != TOK_SEMICOLON) {
+            /* Could be: struct Name { ... } Alias   — has body ahead
+             *        or: struct Name Alias;          — forward ref alias */
+            strncpy(name_buf, cur(p)->value, sizeof(name_buf)-1);
+            adv(p);
+        }
+
+        /* If next token is '{', this is a compound struct/enum definition.
+         * Reconstruct: push back what we consumed and let parse_struct/enum do it,
+         * but since we already consumed the keyword + name, handle inline here. */
+        if (check(p, TOK_LBRACE)) {
+            /* inline body — parse fields/members ourselves */
+            if (!is_enum) {
+                /* ── inline struct body ── */
+                StructDecl *sd = structdecl_new();
+                sd->name = name_buf[0] ? strdup(name_buf) : strdup("__anon_struct");
+                int fcap = 8;
+                sd->fields = malloc(fcap * sizeof(StructField));
+                int offset = 0;
+                adv(p); /* consume '{' */
+                while (!check(p, TOK_RBRACE) && !check(p, TOK_EOF)) {
+                    if (sd->nfields >= fcap)
+                        sd->fields = realloc(sd->fields, (fcap *= 2) * sizeof(StructField));
+                    VarType ftype;
+                    char nested[256] = "";
+                    int is_ptr_field = 0;
+                    if (check(p, TOK_STRUCT)) {
+                        adv(p);
+                        strncpy(nested, cur(p)->value, sizeof(nested)-1);
+                        expect(p, TOK_IDENT);
+                        ftype = TYPE_STRUCT;
+                    } else if (!parse_type_kw(p, &ftype)) {
+                        fprintf(stderr, "[parser] %d:%d: expected field type\n",
+                                cur(p)->line, cur(p)->col);
+                        p->errors++; break;
+                    }
+                    if (check(p, TOK_STAR)) { adv(p); is_ptr_field = 1; ftype = TYPE_PTR; }
+                    (void)is_ptr_field;
+                    char *fname = strdup(cur(p)->value);
+                    expect(p, TOK_IDENT);
+                    expect(p, TOK_SEMICOLON);
+                    sd->fields[sd->nfields].type        = ftype;
+                    sd->fields[sd->nfields].name        = fname;
+                    sd->fields[sd->nfields].struct_name = nested[0] ? strdup(nested) : NULL;
+                    sd->fields[sd->nfields].offset      = offset;
+                    sd->nfields++;
+                    offset += 8;
+                }
+                expect(p, TOK_RBRACE);
+                sd->total_size = offset;
+                prog->structs = realloc(prog->structs, (prog->nstructs+1)*sizeof(StructDecl*));
+                prog->structs[prog->nstructs++] = sd;
+
+                /* trailing alias name */
+                if (check(p, TOK_IDENT)) {
+                    sd->typedef_name = strdup(cur(p)->value);
+                    TypedefDecl *td = typedefdecl_new();
+                    td->alias     = strdup(cur(p)->value);
+                    td->base_type = TYPE_STRUCT;
+                    td->base_name = strdup(sd->name);
+                    if (p->ntypedefs < 128) p->typedefs[p->ntypedefs++] = td;
+                    prog->typedefs = realloc(prog->typedefs, (prog->ntypedefs+1)*sizeof(TypedefDecl*));
+                    prog->typedefs[prog->ntypedefs++] = td;
+                    adv(p);
+                }
+                match(p, TOK_SEMICOLON);
+            } else {
+                /* ── inline enum body ── */
+                EnumDecl *ed = enumdecl_new();
+                ed->name = name_buf[0] ? strdup(name_buf) : strdup("__anon_enum");
+                int cap = 8;
+                ed->member_names  = malloc(cap * sizeof(char *));
+                ed->member_values = malloc(cap * sizeof(long));
+                long next_val = 0;
+                adv(p); /* consume '{' */
+                while (!check(p, TOK_RBRACE) && !check(p, TOK_EOF)) {
+                    if (ed->nmembers >= cap) {
+                        ed->member_names  = realloc(ed->member_names,  (cap*=2)*sizeof(char*));
+                        ed->member_values = realloc(ed->member_values, cap*sizeof(long));
+                    }
+                    ed->member_names[ed->nmembers] = strdup(cur(p)->value);
+                    expect(p, TOK_IDENT);
+                    if (check(p, TOK_ASSIGN)) {
+                        adv(p);
+                        int neg = check(p, TOK_MINUS); if (neg) adv(p);
+                        long v = atol(cur(p)->value); if (neg) v = -v;
+                        expect(p, TOK_INT_LIT);
+                        next_val = v;
+                    }
+                    ed->member_values[ed->nmembers] = next_val++;
+                    ed->nmembers++;
+                    match(p, TOK_COMMA);
+                }
+                expect(p, TOK_RBRACE);
+                prog->enums = realloc(prog->enums, (prog->nenums+1)*sizeof(EnumDecl*));
+                prog->enums[prog->nenums++] = ed;
+                if (p->nenums < 128) p->enums[p->nenums++] = ed;
+
+                /* trailing alias name */
+                if (check(p, TOK_IDENT)) {
+                    TypedefDecl *td = typedefdecl_new();
+                    td->alias     = strdup(cur(p)->value);
+                    td->base_type = TYPE_INT;
+                    td->base_name = strdup(ed->name);
+                    if (p->ntypedefs < 128) p->typedefs[p->ntypedefs++] = td;
+                    prog->typedefs = realloc(prog->typedefs, (prog->ntypedefs+1)*sizeof(TypedefDecl*));
+                    prog->typedefs[prog->ntypedefs++] = td;
+                    adv(p);
+                }
+                match(p, TOK_SEMICOLON);
+            }
+            return;
+        }
+
+        /* No brace — forward-ref form: typedef struct Name Alias; */
+        /* name_buf holds the struct/enum name; cur token is the alias IDENT */
+        if (name_buf[0] && check(p, TOK_IDENT)) {
+            TypedefDecl *td = typedefdecl_new();
+            td->alias     = strdup(cur(p)->value);
+            td->base_type = is_enum ? TYPE_INT : TYPE_STRUCT;
+            td->base_name = strdup(name_buf);
+            if (p->ntypedefs < 128) p->typedefs[p->ntypedefs++] = td;
+            prog->typedefs = realloc(prog->typedefs, (prog->ntypedefs+1)*sizeof(TypedefDecl*));
+            prog->typedefs[prog->ntypedefs++] = td;
+            adv(p);
+        }
+        match(p, TOK_SEMICOLON);
+        return;
+    }
+
+    /* ── Simple alias form: typedef int MyInt;  typedef void* Handle; etc. ── */
+    TypedefDecl *td = typedefdecl_new();
+    char base_name_buf[256] = "";
+
+    VarType bt = TYPE_INT;
+    if (!parse_type_kw(p, &bt)) {
+        fprintf(stderr, "[parser] %d:%d: expected type after 'typedef'\n",
+                cur(p)->line, cur(p)->col);
+        p->errors++;
+        free(td);
+        return;
+    }
+    /* handle void* */
+    if (bt == TYPE_VOID && check(p, TOK_STAR)) { adv(p); bt = TYPE_VOID_PTR; }
+    td->base_type = bt;
+    td->base_name = base_name_buf[0] ? strdup(base_name_buf) : NULL;
+
+    /* optional * for pointer typedef */
+    if (check(p, TOK_STAR)) {
+        adv(p);
+        if (td->base_type != TYPE_VOID_PTR) td->base_type = TYPE_PTR;
+    }
+
+    td->alias = strdup(cur(p)->value);
+    expect(p, TOK_IDENT);
+    expect(p, TOK_SEMICOLON);
+
+    /* register alias in parser for use in variable declarations */
+    if (p->ntypedefs < 128)
+        p->typedefs[p->ntypedefs++] = td;
+
+    prog->typedefs = realloc(prog->typedefs, (prog->ntypedefs + 1) * sizeof(TypedefDecl *));
+    prog->typedefs[prog->ntypedefs++] = td;
 }
 
 static void parse_main(Parser *p, Program *prog) {
@@ -607,11 +925,13 @@ static void parse_main(Parser *p, Program *prog) {
 
 /*
  * parse_func: parses a user-defined function at top level.
- * The return type token has already been consumed into `rettype`.
+ * Qualifiers (static, inline) and return type already consumed by caller.
  *
- *   <rettype> <name> ( [<type> <param>, ...] ) { <body> }
+ *   [static] [inline] <rettype> <n> ( params ) { body }
+ *   [static] [inline] <rettype> <n> ( params ) ;        <- forward decl
  */
-static void parse_func(Parser *p, Program *prog, VarType rettype) {
+static void parse_func(Parser *p, Program *prog, VarType rettype,
+                        int is_static, int is_inline) {
     /* name */
     char *fname = strdup(cur(p)->value);
     expect(p, TOK_IDENT);
@@ -631,11 +951,29 @@ static void parse_func(Parser *p, Program *prog, VarType rettype) {
             strncpy(pstruct, cur(p)->value, sizeof(pstruct)-1);
             expect(p, TOK_IDENT);
             ptype = TYPE_STRUCT;
-        } else if (!parse_type_kw(p, &ptype)) {
-            fprintf(stderr, "[parser] %d:%d: expected type in parameter list\n",
-                    cur(p)->line, cur(p)->col);
-            p->errors++;
-            break;
+        } else {
+            /* Capture IDENT type name before parse_type_kw consumes it */
+            if (cur(p)->type == TOK_IDENT)
+                strncpy(pstruct, cur(p)->value, sizeof(pstruct)-1);
+            if (!parse_type_kw(p, &ptype)) {
+                fprintf(stderr, "[parser] %d:%d: expected type in parameter list\n",
+                        cur(p)->line, cur(p)->col);
+                p->errors++;
+                break;
+            }
+            /* Resolve typedef alias → underlying struct name */
+            if (ptype == TYPE_STRUCT && pstruct[0]) {
+                for (int i = 0; i < p->ntypedefs; i++) {
+                    if (strcmp(p->typedefs[i]->alias, pstruct) == 0
+                            && p->typedefs[i]->base_type == TYPE_STRUCT
+                            && p->typedefs[i]->base_name) {
+                        strncpy(pstruct, p->typedefs[i]->base_name, sizeof(pstruct)-1);
+                        break;
+                    }
+                }
+            } else {
+                pstruct[0] = '\0'; /* clear for non-struct types */
+            }
         }
         VarType ptr_base = ptype;
         if (check(p, TOK_STAR)) { adv(p); ptype = TYPE_PTR; }
@@ -649,16 +987,28 @@ static void parse_func(Parser *p, Program *prog, VarType rettype) {
     }
     expect(p, TOK_RPAREN);
 
-    /* reset locals and seed with parameter names so body can reference them */
-    p->nlocals = 0;
-    for (int i = 0; i < nparams; i++)
-        parser_add_var(p, params[i].name);
-
     FuncDecl *fd  = funcdecl_new();
     fd->name      = fname;
     fd->rettype   = rettype;
     fd->params    = params;
     fd->nparams   = nparams;
+    fd->is_static = is_static;
+    fd->is_inline = is_inline;
+
+    /* Forward declaration -- semicolon instead of body */
+    if (check(p, TOK_SEMICOLON)) {
+        adv(p);
+        fd->is_extern = 1;
+        prog->funcs = realloc(prog->funcs, (prog->nfuncs+1) * sizeof(FuncDecl *));
+        prog->funcs[prog->nfuncs++] = fd;
+        return;
+    }
+
+    /* reset locals and seed with parameter names so body can reference them */
+    p->nlocals = 0;
+    for (int i = 0; i < nparams; i++)
+        parser_add_var(p, params[i].name);
+
     parse_body(p, &fd->stmts, &fd->nstmts);
 
     prog->funcs = realloc(prog->funcs, (prog->nfuncs+1) * sizeof(FuncDecl *));
@@ -684,11 +1034,22 @@ Program *parser_parse(Parser *p) {
             parse_using(p, prog);
         } else if (check(p, TOK_STRUCT)) {
             parse_struct(p, prog);
+        } else if (check(p, TOK_ENUM)) {
+            parse_enum(p, prog);
+        } else if (check(p, TOK_TYPEDEF)) {
+            parse_typedef(p, prog);
         } else if (check(p, TOK_MAIN)) {
             parse_main(p, prog);
         } else {
-            /* Try to parse a user function: starts with a type keyword */
-            /* Handle: struct TypeName funcName(...) for struct-returning functions */
+            /* Try to parse a user function.
+             * Optional qualifiers: static, inline (any order, any combination) */
+            int is_static = 0, is_inline = 0;
+            while (check(p, TOK_STATIC) || check(p, TOK_INLINE)) {
+                if (check(p, TOK_STATIC)) { is_static = 1; adv(p); }
+                else                      { is_inline = 1; adv(p); }
+            }
+
+            /* Return type: handle struct TypeName funcName(...) */
             VarType rettype = TYPE_VOID;
             int is_struct_ret = 0;
             char struct_ret_name[256] = "";
@@ -706,7 +1067,7 @@ Program *parser_parse(Parser *p) {
                 p->errors++;
                 break;
             }
-            parse_func(p, prog, rettype);
+            parse_func(p, prog, rettype, is_static, is_inline);
         }
     }
     return prog;

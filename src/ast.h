@@ -16,6 +16,7 @@ typedef enum {
     TYPE_VOID,    /* no return value         */
     TYPE_PTR,     /* pointer (int*)          */
     TYPE_STRUCT,  /* struct type             */
+    TYPE_VOID_PTR,/* void* generic pointer   */
 } VarType;
 
 /* ── Expression kinds ── */
@@ -107,6 +108,7 @@ typedef struct {
 /* ── Struct declaration ── */
 typedef struct {
     char         *name;
+    char         *typedef_name; /* alias from typedef struct Foo {} Bar;  NULL if none */
     StructField  *fields;
     int           nfields;
     int           total_size; /* total bytes */
@@ -129,7 +131,24 @@ typedef struct {
     Stmt      **stmts;
     int         nstmts;
     int         is_extern;  /* 1 = declared but defined in another .o (don't emit body) */
+    int         is_static;  /* 1 = local linkage, no .global directive                  */
+    int         is_inline;  /* 1 = inline hint (implies static linkage)                 */
 } FuncDecl;
+
+/* ── Enum declaration ── */
+typedef struct {
+    char *name;           /* enum Name { ... }  */
+    char **member_names;  /* array of member name strings */
+    long *member_values;  /* array of integer values */
+    int   nmembers;
+} EnumDecl;
+
+/* ── Typedef declaration ── */
+typedef struct {
+    char   *alias;        /* typedef int MyInt  → alias = "MyInt" */
+    VarType base_type;    /* the underlying type */
+    char   *base_name;    /* if base is struct/enum: its name */
+} TypedefDecl;
 
 /* ── Top-level declarations ── */
 typedef struct { char *module; }  ImportDecl;
@@ -142,19 +161,23 @@ typedef struct {
 } MainFunc;
 
 typedef struct {
-    ImportDecl *imports;  int nimports;
-    UsingDecl  *usings;   int nusings;
-    StructDecl **structs; int nstructs;
-    MainFunc   *mainfn;   /* NULL if not present */
-    FuncDecl  **funcs;    int nfuncs;
+    ImportDecl  *imports;  int nimports;
+    UsingDecl   *usings;   int nusings;
+    StructDecl **structs;  int nstructs;
+    EnumDecl   **enums;    int nenums;
+    TypedefDecl **typedefs; int ntypedefs;
+    MainFunc    *mainfn;   /* NULL if not present */
+    FuncDecl   **funcs;    int nfuncs;
 } Program;
 
 /* Helpers */
-Expr       *expr_new(ExprKind k);
-Stmt       *stmt_new(StmtKind k);
-FuncDecl   *funcdecl_new(void);
-StructDecl *structdecl_new(void);
-Program    *program_new(void);
-void        program_free(Program *p);
+Expr        *expr_new(ExprKind k);
+Stmt        *stmt_new(StmtKind k);
+FuncDecl    *funcdecl_new(void);
+StructDecl  *structdecl_new(void);
+EnumDecl    *enumdecl_new(void);
+TypedefDecl *typedefdecl_new(void);
+Program     *program_new(void);
+void         program_free(Program *p);
 
 #endif /* AST_H */

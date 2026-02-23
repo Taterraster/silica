@@ -103,6 +103,10 @@ static struct { const char *kw; TokenType t; } kwtab[] = {
     {"bool",   TOK_BOOL},   {"float",  TOK_FLOAT}, {"long",   TOK_LONG},
     {"byte",   TOK_BYTE},   {"uint",   TOK_UINT},  {"void",   TOK_VOID},
     {"struct", TOK_STRUCT},
+    {"enum",   TOK_ENUM},
+    {"typedef",TOK_TYPEDEF},
+    {"static", TOK_STATIC},
+    {"inline", TOK_INLINE},
     {"true",   TOK_TRUE},   {"false",  TOK_FALSE},
     {"return", TOK_RETURN},
     {"if",     TOK_IF},     {"else",   TOK_ELSE},
@@ -235,6 +239,10 @@ const char *token_type_name(TokenType t) {
         case TOK_AMP:        return "&";
         case TOK_ARROW:      return "->";
         case TOK_STRUCT:     return "struct";
+        case TOK_ENUM:       return "enum";
+        case TOK_TYPEDEF:    return "typedef";
+        case TOK_STATIC:     return "static";
+        case TOK_INLINE:     return "inline";
         case TOK_EOF:        return "EOF";
         default:             return "ERROR";
     }

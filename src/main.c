@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 /*
- * silicac -- The Silica Language Compiler v0.0.1
+ * silicac -- The Silica Language Compiler Snapshot v0.0.2-a
  */
 
 #include <stdio.h>
@@ -251,7 +251,7 @@ static const char *REPL_IMPORTS =
     "import std.mem;\n";
 
 static void run_repl(void) {
-    printf("Silica REPL v0.0.1  (Ctrl+D to exit)\n");
+    printf("Silica REPL Snapshot v0.0.2-a  (Ctrl+D to exit)\n");
     char preamble[65536] = "";
     char extra_imports[4096] = "";
     char line[4096];
@@ -355,7 +355,7 @@ int main(int argc, char **argv) {
         self_path[sizeof(self_path)-1] = '\0';
     }
     if (argc < 2) {
-        fprintf(stderr, "Silica Compiler v0.0.1\nUsage: silicac [options] <source.slc>\n       silicac --repl\n       silicac --help\n");
+        fprintf(stderr, "Silica Compiler Snapshot v0.0.2-a\nUsage: silicac [options] <source.slc>\n       silicac --repl\n       silicac --help\n");
         return 1;
     }
 
@@ -381,12 +381,12 @@ int main(int argc, char **argv) {
 
     if (flag_repl) { run_repl(); return 0; }
 	if (flag_version){
-		puts("silicac -- Silica Language Compiler v0.0.1");
+		puts("silicac -- Silica Language Compiler Snapshot v0.0.2-a");
 		return 0;
 	}
     if (flag_help) {
         puts(
-            "silicac -- Silica Language Compiler v0.0.1\n"
+            "silicac -- Silica Language Compiler Snapshot v0.0.2-a\n"
             "\n"
             "Usage:\n"
             "  silicac <source.slc>               Compile to ./a.out\n"

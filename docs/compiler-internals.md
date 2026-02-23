@@ -55,6 +55,7 @@ TOK_INT_LIT, TOK_FLOAT_LIT, TOK_CHAR_LIT, TOK_STRING_LIT
 TOK_IDENT
 TOK_INT, TOK_CHAR, TOK_STRING, TOK_BOOL, TOK_FLOAT,
 TOK_LONG, TOK_BYTE, TOK_UINT, TOK_VOID, TOK_STRUCT
+TOK_ENUM, TOK_TYPEDEF, TOK_STATIC, TOK_INLINE
 TOK_IF, TOK_ELSE, TOK_RETURN, TOK_CONST
 TOK_IMPORT, TOK_USING, TOK_MAIN, TOK_BREAK, TOK_CONTINUE
 TOK_PLUS, TOK_MINUS, TOK_STAR, TOK_SLASH, TOK_PERCENT
@@ -78,7 +79,7 @@ TOK_EOF, TOK_ERROR
 typedef enum {
     TYPE_INT, TYPE_CHAR, TYPE_STRING, TYPE_BOOL,
     TYPE_FLOAT, TYPE_LONG, TYPE_BYTE, TYPE_UINT,
-    TYPE_VOID, TYPE_PTR, TYPE_STRUCT
+    TYPE_VOID, TYPE_PTR, TYPE_STRUCT, TYPE_VOID_PTR
 } VarType;
 ```
 
@@ -164,12 +165,35 @@ struct Stmt {
 
 ```c
 typedef struct {
-    ImportDecl  *imports;  int nimports;
-    UsingDecl   *usings;   int nusings;
-    StructDecl **structs;  int nstructs;
-    MainFunc    *mainfn;
-    FuncDecl   **funcs;    int nfuncs;
+    ImportDecl   *imports;  int nimports;
+    UsingDecl    *usings;   int nusings;
+    StructDecl  **structs;  int nstructs;
+    EnumDecl    **enums;    int nenums;
+    TypedefDecl **typedefs; int ntypedefs;
+    MainFunc     *mainfn;
+    FuncDecl    **funcs;    int nfuncs;
 } Program;
+```
+
+### EnumDecl
+
+```c
+typedef struct {
+    char  *name;
+    char **member_names;
+    long  *member_values;
+    int    nmembers;
+} EnumDecl;
+```
+
+### TypedefDecl
+
+```c
+typedef struct {
+    char   *alias;      // the new name
+    VarType base_type;  // underlying type
+    char   *base_name;  // for struct/enum: the original type name
+} TypedefDecl;
 ```
 
 ### StructDecl
@@ -177,9 +201,10 @@ typedef struct {
 ```c
 typedef struct {
     char         *name;
+    char         *typedef_name;  // alias from typedef struct Foo {} Bar; (NULL if none)
     StructField  *fields;
     int           nfields;
-    int           total_size;   // bytes
+    int           total_size;    // bytes
 } StructDecl;
 
 typedef struct {
@@ -188,6 +213,22 @@ typedef struct {
     char    *struct_name;  // nested struct type name
     int      offset;       // byte offset within the struct
 } StructField;
+```
+
+### FuncDecl
+
+```c
+typedef struct {
+    char       *name;
+    VarType     rettype;
+    FuncParam  *params;
+    int         nparams;
+    Stmt      **stmts;
+    int         nstmts;
+    int         is_extern;  // 1 = forward/extern declaration, no body emitted
+    int         is_static;  // 1 = local linkage, no .global directive
+    int         is_inline;  // 1 = inline hint, implies local linkage
+} FuncDecl;
 ```
 
 ---
@@ -200,9 +241,17 @@ Recursive descent, two-token lookahead (`cur` and `nxt`).
 
 **Struct type ambiguity:** An `IDENT` token at the start of a statement could be a struct type name (e.g. `Point p;`) or a function call / expression (e.g. `io.println(...)`). The parser resolves this by only treating an `IDENT` as a type name when the *next* token is another `IDENT` or `*` — otherwise it falls through to expression parsing.
 
-**Redeclaration:** When a variable is declared that already exists in the current scope, the parser silently turns it into an assignment expression. This is intentional and allows the common `int i = i + 1;` update pattern inside loops.
+**Typedef alias resolution:** When `parse_type_kw` encounters an `IDENT`, it searches the parser's typedef registry. If the alias maps to `TYPE_STRUCT`, the underlying `base_name` is propagated into `s->struct_name` so the codegen can find the correct struct layout. This happens both in variable declarations and in function parameter lists.
 
-**Pointer types:** `int*` is parsed as type `int` followed by `TOK_STAR`, setting `is_ptr = 1` and storing `ptr_base = TYPE_INT` in the statement. The variable's `vtype` becomes `TYPE_PTR`.
+**Compound typedef forms:** `typedef struct { ... } Alias;` and `typedef enum { ... } Alias;` are fully handled inside `parse_typedef`. The struct/enum is registered normally, and a `TypedefDecl` mapping the trailing alias to the struct/enum name is also registered. Both `struct Vec2 v;` and `Vec2 v;` work for the same type.
+
+**Redeclaration:** When a variable is declared that already exists in the current scope, the parser silently turns it into an assignment expression. This allows the common `int i = i + 1;` update pattern inside loops.
+
+**Pointer types:** `int*` is parsed as type `int` followed by `TOK_STAR`, setting `is_ptr = 1` and storing `ptr_base = TYPE_INT`. The variable's `vtype` becomes `TYPE_PTR`.
+
+**Function qualifiers:** At the top-level dispatch, `parser_parse` consumes any number of `TOK_STATIC` / `TOK_INLINE` tokens before the return type, then passes `is_static` and `is_inline` flags into `parse_func`. The flags are stored on `FuncDecl` and used by `emit_func` in the codegen to suppress the `.global` directive.
+
+**Forward declarations:** After parsing a function's parameter list, `parse_func` checks whether the next token is `TOK_SEMICOLON` rather than `TOK_LBRACE`. If so, it sets `fd->is_extern = 1` and skips body parsing. The function is still registered in `prog->funcs` so call sites can resolve against it.
 
 ### Expression grammar (simplified)
 
@@ -307,9 +356,20 @@ fprintf(out, "movabsq $0x%llx, %%rax\n"
 
 (Uses the red zone — the 128 bytes below `%rsp` that the ABI guarantees won't be clobbered by signal handlers in leaf functions.)
 
-### Stdlib dispatch
+### Function symbol emission
 
-Stdlib calls are not real function calls — they are recognised by name in `emit_call()` and expanded inline to syscall sequences or arithmetic. For example `io.println(x)` emits a `sys_write` syscall directly; `math.sqrt(n)` emits a Newton's method loop.
+Each user function emits a symbol label. By default the symbol is also declared `.global` (visible to the linker). For `static` and `inline` functions this is suppressed:
+
+```c
+/* static and inline functions suppress .global — local linkage only */
+if (!fd->is_static && !fd->is_inline)
+    fprintf(out, ".global %s\n", sym);
+fprintf(out, "%s:\n", sym);
+```
+
+Functions with `is_extern = 1` (forward declarations with no body) are skipped entirely — only the function signature is registered for call-site resolution.
+
+### Stdlib dispatch
 
 `resolve_name()` canonicalises short forms (`io.X` → `std.io.X`) and enforces the import gate — calling a stdlib function without the corresponding `import` is caught here and sets `cg->had_error = 1`.
 

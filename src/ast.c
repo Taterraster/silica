@@ -23,6 +23,14 @@ StructDecl *structdecl_new(void) {
     return calloc(1, sizeof(StructDecl));
 }
 
+EnumDecl *enumdecl_new(void) {
+    return calloc(1, sizeof(EnumDecl));
+}
+
+TypedefDecl *typedefdecl_new(void) {
+    return calloc(1, sizeof(TypedefDecl));
+}
+
 Program *program_new(void) {
     return calloc(1, sizeof(Program));
 }
@@ -72,6 +80,22 @@ void program_free(Program *p) {
         free(sd);
     }
     free(p->structs);
+    for (int i = 0; i < p->nenums; i++) {
+        EnumDecl *ed = p->enums[i];
+        free(ed->name);
+        for (int j = 0; j < ed->nmembers; j++) free(ed->member_names[j]);
+        free(ed->member_names);
+        free(ed->member_values);
+        free(ed);
+    }
+    free(p->enums);
+    for (int i = 0; i < p->ntypedefs; i++) {
+        TypedefDecl *td = p->typedefs[i];
+        free(td->alias);
+        free(td->base_name);
+        free(td);
+    }
+    free(p->typedefs);
     if (p->mainfn) {
         free(p->mainfn->name);
         for (int i = 0; i < p->mainfn->nstmts; i++) stmt_free(p->mainfn->stmts[i]);

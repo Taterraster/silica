@@ -15,12 +15,16 @@ typedef enum {
     TOK_BREAK, TOK_CONTINUE,
     TOK_IDENT,
     TOK_STRUCT,
+    TOK_ENUM,
+    TOK_TYPEDEF,
+    TOK_STATIC,
+    TOK_INLINE,
     TOK_LPAREN, TOK_RPAREN,
     TOK_LBRACE, TOK_RBRACE,
     TOK_LBRACKET, TOK_RBRACKET,
     TOK_SEMICOLON, TOK_DOT, TOK_COMMA, TOK_ASSIGN,
-    TOK_AMP,    
-    TOK_ARROW,  
+    TOK_AMP,    /* &  — address-of / bitwise-and */
+    TOK_ARROW,  /* -> — pointer field access     */
     TOK_PLUS, TOK_MINUS, TOK_STAR, TOK_SLASH, TOK_PERCENT,
     TOK_EQ, TOK_NEQ,
     TOK_LT, TOK_GT, TOK_LTE, TOK_GTE,

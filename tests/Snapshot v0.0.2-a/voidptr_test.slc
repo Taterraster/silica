@@ -1,0 +1,33 @@
+import std.io;
+import std.mem;
+import std.main;
+
+main voidptr_test() {
+    io.println("=== void* / heap alloc test ===");
+
+    // mem.alloc now returns a pointer
+    void* buf = mem.alloc(8, 0);
+    io.print("buf ptr != 0: ");
+    if (buf > 0) { io.println("yes"); } else { io.println("no"); }
+
+    // mem.alloc_raw — allocate exact bytes
+    void* raw = mem.alloc_raw(64);
+    io.print("raw ptr != 0: ");
+    if (raw > 0) { io.println("yes"); } else { io.println("no"); }
+
+    // pointers are greater than zero (valid heap addresses)
+    io.print("raw > buf: ");
+    if (raw > buf) { io.println("yes"); } else { io.println("no"); }
+
+    // write through a typed pointer to the heap region
+    int* iptr = &raw;
+    io.print("iptr address: ");
+    if (iptr > 0) { io.println("valid"); }
+
+    // mem.free is a no-op but shouldn't crash
+    mem.free(buf);
+    mem.free(raw);
+    io.println("mem.free: ok");
+
+    voidptr_test.errorcode = 0;
+}

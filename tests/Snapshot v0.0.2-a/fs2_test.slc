@@ -1,0 +1,59 @@
+import std.io;
+import std.fs;
+import std.str;
+import std.main;
+
+main fs2_test() {
+    io.println("=== fs.open/write/read_all/close/size test ===");
+
+    string path = "/tmp/silica_fs2_test.txt";
+
+    // open for write (mode 1 = write/trunc)
+    int fd = fs.open(path, 1);
+    io.print("fd (write): ");
+    if (fd >= 0) { io.println("ok"); } else { io.println("failed"); }
+
+    // write some content
+    int written = fs.write(fd, "Hello from Silica!\n");
+    io.print("written bytes: "); io.println(written);
+    int w2 = fs.write(fd, "Second line here.\n");
+    io.print("written bytes: "); io.println(w2);
+
+    // close it
+    fs.close(fd);
+    io.println("closed write fd");
+
+    // check file size
+    int sz = fs.size(path);
+    io.print("file size: "); io.println(sz);
+
+    // open for read (mode 0)
+    int rfd = fs.open(path, 0);
+    io.print("fd (read): ");
+    if (rfd >= 0) { io.println("ok"); } else { io.println("failed"); }
+
+    // read entire file
+    string content = fs.read_all(rfd);
+    io.print("content length: "); io.println(str.length(content));
+    io.println("--- file contents ---");
+    io.println(content);
+    io.println("--- end ---");
+
+    fs.close(rfd);
+
+    // open for append (mode 2)
+    int afd = fs.open(path, 2);
+    fs.write(afd, "Appended line.\n");
+    fs.close(afd);
+    io.println("appended ok");
+
+    // verify size grew
+    int sz2 = fs.size(path);
+    io.print("size after append: "); io.println(sz2);
+
+    // cleanup
+    fs.delete(path);
+    io.println("deleted file");
+
+    fs2_test.errorcode = 0;
+}

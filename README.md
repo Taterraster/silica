@@ -22,11 +22,15 @@ main hello() {
 
 ## Features
 
-- **Primitive types** — `int`, `long`, `uint`, `byte`, `char`, `bool`, `float`, `string`
-- **Structs** — `struct Point { int x; int y; }` with dot-access
-- **Pointers** — `int* p = &x;`, `*p = 42;`, pass-by-reference functions
+- **Primitive types** — `int`, `long`, `uint`, `byte`, `char`, `bool`, `float`, `string`, `void*`
+- **Structs** — `struct Point { int x; int y; }` with dot-access; typedef compound form `typedef struct { } Alias;`
+- **Enums** — `enum Color { RED=1, GREEN, BLUE }` with auto-increment; typedef compound form
+- **Typedefs** — `typedef int i64;`, `typedef struct Foo Foo;`, inline compound forms
+- **Pointers** — `int* p = &x;`, `*p = 42;`, `void*` generic heap pointers
 - **Arrays** — heap-allocated, literal initialisation, index access
 - **Functions** — multiple return types, overloading, full recursion with dynamic stack frames
+- **Function qualifiers** — `static` (local linkage), `inline` (inline hint), combinable
+- **Forward declarations** — `int foo(int x);` declares a function before its definition
 - **Control flow** — `if`/`else if`/`else`, `loops.while`, `loops.for`, `break`, `continue`
 - **Type casting** — `(float)n`, `(int)f`
 - **Modules** — `.slh` header libraries and `.slc` compiled modules
@@ -42,7 +46,6 @@ main hello() {
 ```bash
 make              # builds to build/silicac
 make install      # copies to /usr/local/bin/silicac
-make test         # runs all 21 tests
 make clean        # removes build/
 ```
 
@@ -100,6 +103,19 @@ int fib(int n) {
 // Overloading — same name, different signatures
 void greet(string name) { io.println(name); }
 void greet(int n)       { io.println(n); }
+
+// Forward declaration — define later or in another module
+int helper(int x);
+
+// Static — local linkage, not exported
+static int internal(int x) { return x * 2; }
+
+// Inline — inline hint, local linkage
+inline int clamp(int v, int lo, int hi) {
+    if (v < lo) { return lo; }
+    if (v > hi) { return hi; }
+    return v;
+}
 ```
 
 Stack frames are sized dynamically per function — deep recursion works without wasted space.
@@ -112,11 +128,21 @@ struct Point {
     int y;
 }
 
+// Typedef compound form — declare and alias in one go
+typedef struct {
+    int r;
+    int g;
+    int b;
+} Color;
+
 main example() {
     struct Point p;
     p.x = 3;
     p.y = 4;
     io.println(p.x);
+
+    Color c;
+    c.r = 255;
     example.errorcode = 0;
 }
 ```
@@ -195,8 +221,8 @@ main example() {
 | `std.io`    | `print`, `println`, `input`, `inputln` |
 | `std.math`  | `sqrt`, `sin`, `cos`, `log`, `pwr`, `root`, `sigma`, `integral`, `random`, constants `pi`/`e` |
 | `std.str`   | `length`, `concat`, `contains`, `slice`, `upper`, `lower`, `trim`, `repeat`, `from_int`, `to_int`, `eq` |
-| `std.fs`    | `create`, `append`, `read`, `delete` |
-| `std.mem`   | `alloc` |
+| `std.fs`    | `create`, `open`, `close`, `write`, `read_all`, `size`, `append`, `read`, `delete` |
+| `std.mem`   | `alloc` (returns `void*`), `alloc_raw`, `free` |
 | `std.time`  | `now`, `now_ms`, `mono`, `sleep` |
 | `std.net`   | `ip`, `connect`, `send`, `recv`, `close` |
 | `std.env`   | `argc`, `argv`, `get` |
@@ -219,7 +245,7 @@ silica/
 │   ├── ast.c/h       AST node types and helpers
 │   └── codegen.c/h   AST → x86-64 AT&T assembly
 ├── build/            compiler binary + object files (generated)
-├── tests/            21 .slc test programs + .slh library
+├── tests/            27 .slc test programs + .slh libraries
 └── docs/             full documentation
     ├── getting-started.md
     ├── language-reference.md
