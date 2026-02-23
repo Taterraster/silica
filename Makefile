@@ -46,7 +46,7 @@ test: $(TARGET)
 
 # ── Install ───────────────────────────────────────────────────────────────────
 install: $(TARGET)
-	sudo v $(TARGET) /usr/local/bin/silicac
+	sudo cp $(TARGET) /usr/local/bin/silicac
 	@echo "Installed to /usr/local/bin/silicac"
 
 # ── Clean ─────────────────────────────────────────────────────────────────────
