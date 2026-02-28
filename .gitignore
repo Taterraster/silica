@@ -3,4 +3,3 @@ tests/**
 !tests/**/*.slc
 !tests/**/*.slh
 Silica/
-logo.png
