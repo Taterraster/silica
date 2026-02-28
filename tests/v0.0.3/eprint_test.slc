@@ -1,0 +1,13 @@
+// eprint_test.slc — v0.0.3: io.eprint / io.eprintln write to stderr
+import std.io;
+import std.main;
+
+main eprint_test() {
+    io.println("stdout line 1");
+    io.eprintln("stderr line 1");
+    io.println("stdout line 2");
+    io.eprint("stderr no newline");
+    io.eprintln(" stderr with newline");
+    io.println("stdout line 3");
+    eprint_test.errorcode = 0;
+}

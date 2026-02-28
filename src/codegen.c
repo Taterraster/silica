@@ -85,6 +85,8 @@ typedef struct {
     char       loop_top[32][64];   /* label to jump to for continue */
     char       loop_end[32][64];   /* label to jump to for break    */
     int        loop_depth;
+    /* library mode: emit plain symbol names (no __silica_user_ prefix) */
+    int        lib_mode;
 } CG;
 
 static int alloc_var(CG *cg, const char *name, VarType t, int is_const) {
@@ -201,6 +203,19 @@ static void func_label(CG *cg, FuncDecl *fd, char *out, int n) {
     /* Class methods already have a unique mangled name — use it directly */
     if (strncmp(fd->name, "__class_", 8) == 0) {
         snprintf(out, n, "%s", fd->name);
+        return;
+    }
+    /* Library mode: emit plain function names for C/C++ interop */
+    if (cg->lib_mode) {
+        int ov = 0;
+        for (int i = 0; i < cg->nfuncs; i++)
+            if (cg->funcs[i] != fd && strcmp(cg->funcs[i]->name, fd->name) == 0) { ov=1; break; }
+        if (!ov) { snprintf(out, n, "%s", fd->name); return; }
+        /* overloaded: append type signature to keep symbols distinct */
+        char sig[64]; int m = fd->nparams < 63 ? fd->nparams : 63;
+        if (m == 0) { sig[0]='v'; sig[1]=0; }
+        else { for (int i=0;i<m;i++) sig[i]=type_char(fd->params[i].type); sig[m]=0; }
+        snprintf(out, n, "%s_%s", fd->name, sig);
         return;
     }
     int ov = 0;
@@ -410,6 +425,9 @@ static void emit_int_expr(CG *cg, Expr *e) {
             if (e->lhs->kind == EXPR_IDENT) {
                 Var *v = find_var(cg, e->lhs->sval);
                 if (v) stype = v->struct_name;
+            } else if (e->lhs->kind == EXPR_CAST && e->lhs->cast_struct_name) {
+                /* (Node*)expr->field — use cast's struct name */
+                stype = e->lhs->cast_struct_name;
             }
             if (stype) {
                 StructDecl *sd = find_struct(cg, stype);
@@ -461,6 +479,11 @@ static void emit_int_expr(CG *cg, Expr *e) {
                         "    idivq %%rcx\n"
                         "    movq %%rdx, %%rax\n");
                     break;
+                case '&': fprintf(cg->out, "    andq %%rcx, %%rax\n"); break;
+                case '|': fprintf(cg->out, "    orq  %%rcx, %%rax\n"); break;
+                case '^': fprintf(cg->out, "    xorq %%rcx, %%rax\n"); break;
+                case 'L': fprintf(cg->out, "    shlq %%cl,  %%rax\n"); break; /* << */
+                case 'R': fprintf(cg->out, "    shrq %%cl,  %%rax\n"); break; /* >> */
             }
             break;
         }
@@ -531,6 +554,98 @@ static void emit_int_expr(CG *cg, Expr *e) {
                 "    sete %%al\n"
                 "    movzbq %%al, %%rax\n");
             break;
+        case EXPR_BITWISE_NOT:
+            emit_int_expr(cg, e->rhs);
+            fprintf(cg->out, "    notq %%rax\n");
+            break;
+        case EXPR_COMPOUND_ASSIGN: {
+            /* x op= rhs  →  x = x op rhs, leave result in rax */
+            /* evaluate rhs first */
+            emit_int_expr(cg, e->rhs);
+            fprintf(cg->out, "    pushq %%rax\n");   /* push rhs */
+            /* load current lhs value */
+            if (e->lhs->kind == EXPR_IDENT) {
+                Var *v = find_var(cg, e->lhs->sval);
+                if (v) fprintf(cg->out, "    movq -%d(%%rbp), %%rax\n", v->offset);
+                else   fprintf(cg->out, "    xorq %%rax, %%rax\n");
+            } else {
+                emit_int_expr(cg, e->lhs);
+            }
+            fprintf(cg->out, "    popq %%rcx\n");   /* rcx = rhs */
+            switch (e->op) {
+                case '+': fprintf(cg->out, "    addq %%rcx, %%rax\n"); break;
+                case '-': fprintf(cg->out, "    subq %%rcx, %%rax\n"); break;
+                case '*': fprintf(cg->out, "    imulq %%rcx, %%rax\n"); break;
+                case '/': fprintf(cg->out, "    cqto\n    idivq %%rcx\n"); break;
+                case '%': fprintf(cg->out, "    cqto\n    idivq %%rcx\n    movq %%rdx, %%rax\n"); break;
+                case '&': fprintf(cg->out, "    andq %%rcx, %%rax\n"); break;
+                case '|': fprintf(cg->out, "    orq  %%rcx, %%rax\n"); break;
+                case '^': fprintf(cg->out, "    xorq %%rcx, %%rax\n"); break;
+                case 'L': fprintf(cg->out, "    shlq %%cl,  %%rax\n"); break;
+                case 'R': fprintf(cg->out, "    shrq %%cl,  %%rax\n"); break;
+            }
+            /* store back */
+            if (e->lhs->kind == EXPR_IDENT) {
+                Var *v = find_var(cg, e->lhs->sval);
+                if (v) fprintf(cg->out, "    movq %%rax, -%d(%%rbp)\n", v->offset);
+            } else if (e->lhs->kind == EXPR_PTR_FIELD) {
+                /* p->field op= rhs */
+                fprintf(cg->out, "    pushq %%rax\n");
+                emit_int_expr(cg, e->lhs->lhs);  /* rax = ptr */
+                const char *stype = NULL;
+                if (e->lhs->lhs->kind == EXPR_IDENT) {
+                    Var *v = find_var(cg, e->lhs->lhs->sval);
+                    if (v) stype = v->struct_name;
+                }
+                if (stype) {
+                    StructDecl *sd = find_struct(cg, stype);
+                    StructField *sf = sd ? find_field(sd, e->lhs->ptr_field) : NULL;
+                    if (sf) fprintf(cg->out, "    popq %%rcx\n    movq %%rcx, %d(%%rax)\n", sf->offset);
+                    else    fprintf(cg->out, "    popq %%rcx\n    movq %%rcx, (%%rax)\n");
+                } else {
+                    fprintf(cg->out, "    popq %%rcx\n    movq %%rcx, (%%rax)\n");
+                }
+            }
+            break;
+        }
+        case EXPR_INDEX: {
+            /* arr[i]: check if lhs is a string or byte array → stride 1, else stride 8 */
+            int byte_stride = 0;
+            if (e->lhs->kind == EXPR_IDENT) {
+                Var *v = find_var(cg, e->lhs->sval);
+                if (v && (v->type == TYPE_STRING || v->type == TYPE_BYTE
+                          || v->type == TYPE_CHAR))
+                    byte_stride = 1;
+            }
+            emit_int_expr(cg, e->rhs);              /* rax = index */
+            fprintf(cg->out, "    pushq %%rax\n");
+            /* get array/string base pointer */
+            if (e->lhs->kind == EXPR_IDENT) {
+                Var *v = find_var(cg, e->lhs->sval);
+                if (v) {
+                    if (v->type == TYPE_STRING) {
+                        /* string: first qword is the char* pointer */
+                        fprintf(cg->out, "    movq -%d(%%rbp), %%rax\n", v->offset);
+                    } else {
+                        /* array: load ptr stored at offset */
+                        fprintf(cg->out, "    movq -%d(%%rbp), %%rax\n", v->offset);
+                    }
+                } else {
+                    fprintf(cg->out, "    xorq %%rax, %%rax\n");
+                }
+            } else {
+                emit_int_expr(cg, e->lhs);
+            }
+            fprintf(cg->out, "    popq %%rcx\n");   /* rcx = index */
+            if (byte_stride) {
+                /* byte/char indexing: movzbq (rax, rcx, 1), rax */
+                fprintf(cg->out, "    movzbq (%%rax,%%rcx,1), %%rax\n");
+            } else {
+                /* pointer/int array: stride 8 */
+                fprintf(cg->out, "    movq (%%rax,%%rcx,8), %%rax\n");
+            }
+            break;
+        }
         case EXPR_CAST: {
             VarType target = (VarType)e->cast_type;
             if (target == TYPE_FLOAT) {
@@ -559,24 +674,6 @@ static void emit_int_expr(CG *cg, Expr *e) {
             }
             break;
         }
-        case EXPR_INDEX: {
-            /* arr[i]: lhs is array var (ptr stored at rbp-offset),
-               rhs is index. elem size = 8 for all types. */
-            emit_int_expr(cg, e->rhs);              /* rax = index */
-            fprintf(cg->out, "    pushq %%rax\n");
-            /* get array base pointer */
-            if (e->lhs->kind == EXPR_IDENT) {
-                Var *v = find_var(cg, e->lhs->sval);
-                if (v) fprintf(cg->out, "    movq -%d(%%rbp), %%rax\n", v->offset);
-                else { fprintf(cg->out, "    xorq %%rax, %%rax\n"); }
-            } else {
-                emit_int_expr(cg, e->lhs);
-            }
-            fprintf(cg->out,
-                "    popq %%rcx\n"          /* rcx = index */
-                "    movq (%%rax,%%rcx,8), %%rax\n"); /* rax = arr[i] */
-            break;
-        }
         default:
             fprintf(cg->out, "    xorq %%rax, %%rax\n");
     }
@@ -603,6 +700,9 @@ static int is_numeric_expr(Expr *e) {
         case EXPR_ADDROF:      return 1;  /* address is an integer */
         case EXPR_DEREF:       return 1;  /* dereference yields integer */
         case EXPR_PTR_FIELD:   return 1;  /* pointer field access yields integer */
+        case EXPR_BITWISE_NOT:     return 1;
+        case EXPR_COMPOUND_ASSIGN: return 1;
+        case EXPR_STR_INDEX:       return 1;
         default:              return 0;
     }
 }
@@ -956,6 +1056,60 @@ static void emit_call(CG *cg, Expr *e) {
     if (strcmp(name, "std.mem.free") == 0) {
         fprintf(cg->out, "    /* mem.free: no-op (brk allocator) */\n");
         if (e->argc > 0) emit_int_expr(cg, e->args[0]); /* evaluate for side effects */
+        return;
+    }
+
+    /* ── io.eprint / io.eprintln — write to stderr (fd=2) ── */
+    if (strcmp(name, "std.io.eprint") == 0 || strcmp(name, "std.io.eprintln") == 0) {
+        int nl = strstr(name, "eprintln") != NULL;
+        if (e->argc < 1) return;
+        Expr *arg = e->args[0];
+        /* For strings: emit sys_write(2, ptr, len) */
+        if (arg->kind == EXPR_STRING_LIT) {
+            char *txt = nl ? malloc(strlen(arg->sval) + 2) : strdup(arg->sval);
+            if (nl) { strcpy(txt, arg->sval); strcat(txt, "\n"); }
+            const char *lbl = pool_add(txt, &cg->str_counter);
+            fprintf(cg->out,
+                "    movq $1, %%rax\n"
+                "    movq $2, %%rdi\n"        /* fd = 2 (stderr) */
+                "    leaq %s(%%rip), %%rsi\n"
+                "    movq $%zu, %%rdx\n"
+                "    syscall\n",
+                lbl, strlen(txt));
+            free(txt);
+        } else if (arg->kind == EXPR_IDENT) {
+            Var *v = find_var(cg, arg->sval);
+            if (v && v->type == TYPE_STRING) {
+                fprintf(cg->out,
+                    "    movq $1, %%rax\n"
+                    "    movq $2, %%rdi\n"
+                    "    movq -%d(%%rbp), %%rsi\n"
+                    "    movq -%d(%%rbp), %%rdx\n"
+                    "    syscall\n",
+                    v->offset, v->offset - 8);
+                if (nl) {
+                    const char *nlbl = pool_add("\n", &cg->str_counter);
+                    fprintf(cg->out,
+                        "    movq $1, %%rax\n"
+                        "    movq $2, %%rdi\n"
+                        "    leaq %s(%%rip), %%rsi\n"
+                        "    movq $1, %%rdx\n"
+                        "    syscall\n", nlbl);
+                }
+            } else if (v) {
+                /* integer → print to stderr via itoa then write(2) */
+                emit_int_expr(cg, arg);
+                cg->need_itoa = 1;
+                fprintf(cg->out, "    callq __silica_print_int_stderr%s\n",
+                        nl ? "_nl" : "");
+            }
+        } else {
+            /* generic int expression → stderr */
+            emit_int_expr(cg, arg);
+            cg->need_itoa = 1;
+            fprintf(cg->out, "    callq __silica_print_int_stderr%s\n",
+                    nl ? "_nl" : "");
+        }
         return;
     }
 
@@ -2504,6 +2658,11 @@ static void emit_expr(CG *cg, Expr *e) {
             break;
         }
 
+        case EXPR_COMPOUND_ASSIGN:
+            /* Delegate to emit_int_expr which fully handles compound assign */
+            emit_int_expr(cg, e);
+            break;
+
         case EXPR_ASSIGN: {
             char lhs[256] = "";
             flatten(e->lhs, lhs, sizeof(lhs));
@@ -2550,16 +2709,21 @@ static void emit_expr(CG *cg, Expr *e) {
                 emit_int_expr(cg, e->rhs);           /* rax = value */
                 fprintf(cg->out, "    pushq %%rax\n");
                 emit_int_expr(cg, e->lhs->lhs);      /* rax = struct pointer */
-                /* resolve field offset */
+                /* resolve field offset — check ident var or cast struct name */
                 int field_off = 0;
+                const char *sname = NULL;
                 if (e->lhs->lhs->kind == EXPR_IDENT) {
                     Var *pv = find_var(cg, e->lhs->lhs->sval);
-                    if (pv && pv->struct_name) {
-                        StructDecl *sd = find_struct(cg, pv->struct_name);
-                        if (sd && e->lhs->ptr_field) {
-                            StructField *sf = find_field(sd, e->lhs->ptr_field);
-                            if (sf) field_off = sf->offset;
-                        }
+                    if (pv) sname = pv->struct_name;
+                } else if (e->lhs->lhs->kind == EXPR_CAST
+                           && e->lhs->lhs->cast_struct_name) {
+                    sname = e->lhs->lhs->cast_struct_name;
+                }
+                if (sname) {
+                    StructDecl *sd = find_struct(cg, sname);
+                    if (sd && e->lhs->ptr_field) {
+                        StructField *sf = find_field(sd, e->lhs->ptr_field);
+                        if (sf) field_off = sf->offset;
                     }
                 }
                 fprintf(cg->out,
@@ -2842,8 +3006,13 @@ static void emit_stmt(CG *cg, Stmt *s) {
                 VarType slot_type = (s->vtype == TYPE_VOID_PTR) ? TYPE_VOID_PTR : TYPE_PTR;
                 int idx = alloc_var(cg, s->varname, slot_type, s->is_const);
                 Var *v  = &cg->vars[idx];
-                /* keep struct_name for ptr-to-struct */
-                if (s->struct_name) v->struct_name = strdup(s->struct_name);
+                /* keep struct_name for ptr-to-struct (from decl or from cast initializer) */
+                if (s->struct_name) {
+                    v->struct_name = strdup(s->struct_name);
+                } else if (s->init && s->init->kind == EXPR_CAST
+                           && s->init->cast_struct_name) {
+                    v->struct_name = strdup(s->init->cast_struct_name);
+                }
                 fprintf(cg->out, "    /* ptr %s at rbp-%d */\n", s->varname, v->offset);
                 if (s->init) {
                     emit_int_expr(cg, s->init);   /* rax = address */
@@ -3154,6 +3323,54 @@ static void emit_helpers(FILE *out) {
         "    subq %%rcx, %%rdx\n"       /* rdx = length */
         "    movq $1, %%rax\n"          /* sys_write */
         "    movq $1, %%rdi\n"
+        "    movq %%rcx, %%rsi\n"
+        "    syscall\n"
+        "    retq\n"
+    );
+
+    /* ── stderr int print helper (fd=2) ── */
+    fprintf(out,
+        "\n"
+        "# ── int-to-stderr print helper ──\n"
+        "__silica_print_int_stderr_nl:\n"
+        "    movq $1, %%r11\n"
+        "    jmp __silica_print_int_stderr_body\n"
+        "__silica_print_int_stderr:\n"
+        "    xorq %%r11, %%r11\n"
+        "__silica_print_int_stderr_body:\n"
+        "    movq %%rax, %%rbx\n"
+        "    leaq -24(%%rsp), %%rcx\n"
+        "    movq $0, %%r10\n"
+        "    testq %%rbx, %%rbx\n"
+        "    jns .Lpis_nonneg\n"
+        "    movq $1, %%r10\n"
+        "    negq %%rbx\n"
+        ".Lpis_nonneg:\n"
+        "    testq %%r11, %%r11\n"
+        "    jz .Lpis_no_nl\n"
+        "    decq %%rcx\n"
+        "    movb $10, (%%rcx)\n"
+        ".Lpis_no_nl:\n"
+        "    movq $10, %%r8\n"
+        ".Lpis_digit_loop:\n"
+        "    xorq %%rdx, %%rdx\n"
+        "    movq %%rbx, %%rax\n"
+        "    divq %%r8\n"
+        "    movq %%rax, %%rbx\n"
+        "    addq $48, %%rdx\n"
+        "    decq %%rcx\n"
+        "    movb %%dl, (%%rcx)\n"
+        "    testq %%rbx, %%rbx\n"
+        "    jnz .Lpis_digit_loop\n"
+        "    testq %%r10, %%r10\n"
+        "    jz .Lpis_write\n"
+        "    decq %%rcx\n"
+        "    movb $45, (%%rcx)\n"
+        ".Lpis_write:\n"
+        "    leaq -24(%%rsp), %%rdx\n"
+        "    subq %%rcx, %%rdx\n"
+        "    movq $1, %%rax\n"
+        "    movq $2, %%rdi\n"          /* fd = 2 = stderr */
         "    movq %%rcx, %%rsi\n"
         "    syscall\n"
         "    retq\n"
@@ -3602,6 +3819,7 @@ static void emit_func(FuncDecl *fd, FILE *out, CG *parent_cg) {
     cg.using_str   = parent_cg->using_str;
     cg.using_env   = parent_cg->using_env;
     cg.using_asm   = parent_cg->using_asm;
+    cg.lib_mode    = parent_cg->lib_mode;
     cg.str_counter = parent_cg->str_counter;
     cg.lbl_counter = parent_cg->lbl_counter;
     cg.funcs       = parent_cg->funcs;
@@ -3672,8 +3890,12 @@ static void emit_func(FuncDecl *fd, FILE *out, CG *parent_cg) {
                 fprintf(out, "    movq %s, -%d(%%rbp)\n", argregs[ri+1], v->offset - 8);
             ri += 2;
         } else if (fd->params[i].type == TYPE_CHAR || fd->params[i].type == TYPE_BYTE) {
-            if (ri < 6)
-                fprintf(out, "    movb %sb, -%d(%%rbp)\n", argregs[ri], v->offset);
+            /* 8-bit register names for the first 6 arg regs */
+            static const char *bytereg[] = {"%dil","%sil","%dl","%cl","%r8b","%r9b"};
+            if (ri < 6) {
+                fprintf(out, "    movzbq %s, %%rax\n", bytereg[ri]);
+                fprintf(out, "    movq %%rax, -%d(%%rbp)\n", v->offset);
+            }
             ri++;
         } else {
             if (ri < 6)
@@ -3721,10 +3943,11 @@ static void emit_rodata(FILE *out) {
 }
 
 /* ── public entry point ── */
-int codegen_emit(Program *prog, FILE *out) {
+int codegen_emit(Program *prog, FILE *out, int lib_mode) {
     CG cg;
     memset(&cg, 0, sizeof(cg));
     cg.out       = out;
+    cg.lib_mode  = lib_mode;
     cg.funcs     = prog->funcs;
     cg.nfuncs    = prog->nfuncs;
     cg.structs   = prog->structs;
@@ -3749,7 +3972,7 @@ int codegen_emit(Program *prog, FILE *out) {
     }
 
     fprintf(out,
-        "# Silica compiled output -- made with v0.0.2\n"
+        "# Silica compiled output -- made with v0.0.3\n"
         ".section .text\n");
 
     /* emit user-defined functions */

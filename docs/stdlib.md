@@ -60,6 +60,24 @@ string name;
 io.inputln("Enter your name: ", name);
 ```
 
+### io.eprint(value)
+
+Writes a value to **stderr** (file descriptor 2). Same type support as `io.print`. Useful for error messages and diagnostics that should not be mixed with program output.
+
+```silica
+io.eprint("error: ");
+io.eprint(42);
+```
+
+### io.eprintln(value)
+
+Writes a value followed by a newline to **stderr**. Same type support as `io.println`.
+
+```silica
+io.eprintln("error: file not found");
+io.eprintln(errno);
+```
+
 ---
 
 ## std.math

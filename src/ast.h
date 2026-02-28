@@ -42,6 +42,9 @@ typedef enum {
     EXPR_ADDROF,        /* &x              */
     EXPR_DEREF,         /* *p              */
     EXPR_PTR_FIELD,     /* p->field        */
+    EXPR_BITWISE_NOT,   /* ~expr           */
+    EXPR_COMPOUND_ASSIGN, /* x += rhs, x -= rhs, etc. op stored in e->op */
+    EXPR_STR_INDEX,     /* str[i] → byte, stride-1 char access */
 } ExprKind;
 
 typedef struct Expr Expr;
@@ -59,7 +62,8 @@ struct Expr {
     int       argc;     /* CALL / ARRAY_LIT count    */
     Expr     *lhs;      /* ASSIGN / BINOP / INDEX base */
     Expr     *rhs;      /* ASSIGN / BINOP / INDEX idx / ADDROF / DEREF operand */
-    int       cast_type; /* CAST: target VarType (int) */
+    int       cast_type;        /* CAST: target VarType (int) */
+    char     *cast_struct_name; /* CAST: struct name when casting to StructType* */
     /* TYPE_PTR support */
     VarType   ptr_base;  /* base type for pointer declarations */
     char     *ptr_field; /* PTR_FIELD: field name after -> */
@@ -158,6 +162,7 @@ typedef struct {
     char    *name;
     char    *struct_name;  /* if type == TYPE_STRUCT or TYPE_PTR */
     VarType  ptr_base;     /* if type == TYPE_PTR: the pointed-to type */
+    int      is_array;     /* 1 if declared as type[] name */
 } FuncParam;
 
 /* ── User-defined function ── */

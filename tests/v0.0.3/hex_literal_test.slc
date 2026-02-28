@@ -1,0 +1,17 @@
+// hex_literal_test.slc — v0.0.3: 0x... hex literals
+import std.io;
+import std.main;
+
+main hex_literal_test() {
+    int a = 0xFF;
+    io.println(a);         // 255
+    int b = 0x0F;
+    io.println(b);         // 15
+    int c = 0x100;
+    io.println(c);         // 256
+    int d = 0xDEAD;
+    io.println(d);         // 57005
+    int e = 0x00;
+    io.println(e);         // 0
+    hex_literal_test.errorcode = 0;
+}

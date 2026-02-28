@@ -1,0 +1,40 @@
+// str_index_test.slc — v0.0.3: string[i] byte/char indexing
+import std.io;
+import std.main;
+
+// Walk a string and count a character
+int count_char(string s, int len, byte target) {
+    int count = 0;
+    int i = 0;
+    while (i < len) {
+        if (s[i] == target) {
+            count += 1;
+        }
+        i += 1;
+    }
+    return count;
+}
+
+main str_index_test() {
+    string s = "hello world";
+
+    // direct byte access
+    byte h = s[0];
+    io.println(h);          // 104 (h)
+    byte e = s[1];
+    io.println(e);          // 101 (e)
+    byte sp = s[5];
+    io.println(sp);         // 32  (space)
+    byte o = s[4];
+    io.println(o);          // 111 (o)
+
+    // comparison
+    if (h == 104) { io.println("h ok"); }
+    if (e == 101) { io.println("e ok"); }
+
+    // count 'l' (108) in "hello world"
+    int lcount = count_char("hello world", 11, 108);
+    io.println(lcount);     // 3
+
+    str_index_test.errorcode = 0;
+}

@@ -79,6 +79,19 @@ static Token lex_char(Lexer *l, int line, int col) {
 
 static Token lex_number(Lexer *l, int line, int col) {
     size_t start = l->pos;
+    /* hex literal: 0x... or 0X... */
+    if (peek(l) == '0' && (l->src[l->pos+1] == 'x' || l->src[l->pos+1] == 'X')) {
+        advance(l); advance(l); /* consume '0x' */
+        size_t hstart = l->pos;
+        while (isxdigit((unsigned char)peek(l))) advance(l);
+        size_t hlen = l->pos - hstart;
+        char hexbuf[32]; if (hlen > 30) hlen = 30;
+        memcpy(hexbuf, l->src + hstart, hlen); hexbuf[hlen] = '\0';
+        long val = strtol(hexbuf, NULL, 16);
+        char *buf = malloc(24);
+        snprintf(buf, 24, "%ld", val);
+        return mktok(TOK_INT_LIT, buf, line, col);
+    }
     while (isdigit((unsigned char)peek(l))) advance(l);
     /* check for float: digits '.' digits */
     if (peek(l) == '.' && isdigit((unsigned char)l->src[l->pos+1])) {
@@ -166,24 +179,50 @@ Token lexer_next(Lexer *l) {
             if (peek(l) == '=') { advance(l); return mktok(TOK_NEQ, strdup("!="), line, col); }
             return mktok(TOK_BANG, strdup("!"), line, col);
         case '&':
-            if (peek(l) == '&') { advance(l); return mktok(TOK_AND, strdup("&&"), line, col); }
+            if (peek(l) == '&') { advance(l); return mktok(TOK_AND,        strdup("&&"), line, col); }
+            if (peek(l) == '=') { advance(l); return mktok(TOK_AND_ASSIGN,  strdup("&="), line, col); }
             return mktok(TOK_AMP, strdup("&"), line, col);
         case '-':
-            if (peek(l) == '>') { advance(l); return mktok(TOK_ARROW, strdup("->"), line, col); }
+            if (peek(l) == '>') { advance(l); return mktok(TOK_ARROW,       strdup("->"),  line, col); }
+            if (peek(l) == '=') { advance(l); return mktok(TOK_MINUS_ASSIGN, strdup("-="), line, col); }
             return mktok(TOK_MINUS, strdup("-"), line, col);
+        case '+':
+            if (peek(l) == '=') { advance(l); return mktok(TOK_PLUS_ASSIGN,  strdup("+="), line, col); }
+            return mktok(TOK_PLUS,    strdup("+"), line, col);
+        case '*':
+            if (peek(l) == '=') { advance(l); return mktok(TOK_STAR_ASSIGN,  strdup("*="), line, col); }
+            return mktok(TOK_STAR,    strdup("*"), line, col);
+        case '/':
+            if (peek(l) == '=') { advance(l); return mktok(TOK_SLASH_ASSIGN, strdup("/="), line, col); }
+            return mktok(TOK_SLASH,   strdup("/"), line, col);
+        case '%':
+            if (peek(l) == '=') { advance(l); return mktok(TOK_PERCENT_ASSIGN, strdup("%="), line, col); }
+            return mktok(TOK_PERCENT, strdup("%"), line, col);
         case '|':
-            if (peek(l) == '|') { advance(l); return mktok(TOK_OR,  strdup("||"), line, col); }
-            goto lex_error;
+            if (peek(l) == '|') { advance(l); return mktok(TOK_OR,         strdup("||"), line, col); }
+            if (peek(l) == '=') { advance(l); return mktok(TOK_OR_ASSIGN,  strdup("|="), line, col); }
+            return mktok(TOK_PIPE, strdup("|"), line, col);
+        case '^':
+            if (peek(l) == '=') { advance(l); return mktok(TOK_XOR_ASSIGN, strdup("^="), line, col); }
+            return mktok(TOK_CARET, strdup("^"), line, col);
+        case '~':
+            return mktok(TOK_TILDE, strdup("~"), line, col);
         case '<':
+            if (peek(l) == '<') {
+                advance(l);
+                if (peek(l) == '=') { advance(l); return mktok(TOK_SHL_ASSIGN, strdup("<<="), line, col); }
+                return mktok(TOK_SHL, strdup("<<"), line, col);
+            }
             if (peek(l) == '=') { advance(l); return mktok(TOK_LTE, strdup("<="), line, col); }
             return mktok(TOK_LT, strdup("<"), line, col);
         case '>':
+            if (peek(l) == '>') {
+                advance(l);
+                if (peek(l) == '=') { advance(l); return mktok(TOK_SHR_ASSIGN, strdup(">>="), line, col); }
+                return mktok(TOK_SHR, strdup(">>"), line, col);
+            }
             if (peek(l) == '=') { advance(l); return mktok(TOK_GTE, strdup(">="), line, col); }
             return mktok(TOK_GT, strdup(">"), line, col);
-        case '+': return mktok(TOK_PLUS,      strdup("+"), line, col);
-        case '*': return mktok(TOK_STAR,      strdup("*"), line, col);
-        case '/': return mktok(TOK_SLASH,     strdup("/"), line, col);
-        case '%': return mktok(TOK_PERCENT,   strdup("%"), line, col);
         default: lex_error: {
             char *buf = malloc(2); buf[0] = c; buf[1] = '\0';
             fprintf(stderr, "[lexer] unknown char '%c' at %d:%d\n", c, line, col);
@@ -247,6 +286,21 @@ const char *token_type_name(TokenType t) {
         case TOK_BANG:       return "!";
         case TOK_AMP:        return "&";
         case TOK_ARROW:      return "->";
+        case TOK_PLUS_ASSIGN:    return "+=";
+        case TOK_MINUS_ASSIGN:   return "-=";
+        case TOK_STAR_ASSIGN:    return "*=";
+        case TOK_SLASH_ASSIGN:   return "/=";
+        case TOK_PERCENT_ASSIGN: return "%=";
+        case TOK_AND_ASSIGN:     return "&=";
+        case TOK_OR_ASSIGN:      return "|=";
+        case TOK_XOR_ASSIGN:     return "^=";
+        case TOK_SHL_ASSIGN:     return "<<=";
+        case TOK_SHR_ASSIGN:     return ">>=";
+        case TOK_PIPE:       return "|";
+        case TOK_CARET:      return "^";
+        case TOK_TILDE:      return "~";
+        case TOK_SHL:        return "<<";
+        case TOK_SHR:        return ">>";
         case TOK_STRUCT:     return "struct";
         case TOK_ENUM:       return "enum";
         case TOK_TYPEDEF:    return "typedef";

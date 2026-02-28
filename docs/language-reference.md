@@ -75,6 +75,31 @@ main block
 
 A `string` is stored as two consecutive 8-byte slots on the stack: a pointer to the character data and a length. String literals are placed in `.rodata`. There is no null terminator in the length-counted representation, but the data is null-terminated for compatibility.
 
+### String character indexing
+
+Individual bytes of a `string` can be accessed with `[i]`, which returns the zero-extended byte value at that position (the ASCII code of the character):
+
+```silica
+string s = "hello";
+byte h = s[0];   // 104  ('h')
+byte e = s[1];   // 101  ('e')
+byte o = s[4];   // 111  ('o')
+
+if (h == 104) { io.println("got h"); }
+```
+
+Use `str.length(s)` to get the length before walking the string in a loop:
+
+```silica
+int i = 0;
+int len = str.length(s);
+while (i < len) {
+    byte c = s[i];
+    // process c ...
+    i += 1;
+}
+```
+
 ---
 
 ## Variables
@@ -146,6 +171,51 @@ int counter = counter + 1;
 | `\|\|`   | Logical OR (short-circuit)  |
 | `!`      | Logical NOT         |
 
+### Bitwise
+
+| Operator | Description           |
+|----------|-----------------------|
+| `&`      | Bitwise AND           |
+| `\|`     | Bitwise OR            |
+| `^`      | Bitwise XOR           |
+| `~x`     | Bitwise NOT (unary)   |
+| `<<`     | Shift left            |
+| `>>`     | Shift right           |
+
+```silica
+int flags = 0xFF & 0x0F;   // 15
+int bits  = 1 << 4;        // 16
+int mask  = ~0;            // -1 (all bits set)
+int hi    = 0xABCD >> 8;   // 0xAB
+```
+
+### Compound Assignment
+
+All arithmetic and bitwise operators have compound assignment forms:
+
+| Operator | Equivalent     |
+|----------|----------------|
+| `x += n`  | `x = x + n`  |
+| `x -= n`  | `x = x - n`  |
+| `x *= n`  | `x = x * n`  |
+| `x /= n`  | `x = x / n`  |
+| `x %= n`  | `x = x % n`  |
+| `x &= n`  | `x = x & n`  |
+| `x \|= n` | `x = x \| n` |
+| `x ^= n`  | `x = x ^ n`  |
+| `x <<= n` | `x = x << n` |
+| `x >>= n` | `x = x >> n` |
+
+```silica
+int total = 0;
+int i = 1;
+while (i <= 10) {
+    total += i;
+    i += 1;
+}
+io.println(total);   // 55
+```
+
 ### Address / Pointer
 
 | Operator | Description                  |
@@ -154,16 +224,30 @@ int counter = counter + 1;
 | `*p`     | Dereference pointer `p`      |
 | `p->f`   | Field `f` of struct at `*p`  |
 
+### Hex Literals
+
+Integer literals can be written in hexadecimal with `0x` prefix:
+
+```silica
+int a = 0xFF;     // 255
+int b = 0x1000;   // 4096
+int c = 0x0F0F;   // 3855
+```
+
 ### Operator precedence (high to low)
 
-1. Unary: `-x`, `!x`, `&x`, `*p`
+1. Unary: `-x`, `!x`, `~x`, `&x`, `*p`
 2. `*`, `/`, `%`
 3. `+`, `-`
-4. `<`, `>`, `<=`, `>=`
-5. `==`, `!=`
-6. `&&`
-7. `||`
-8. `=` (assignment)
+4. `<<`, `>>`
+5. `&` (bitwise AND)
+6. `^` (bitwise XOR)
+7. `\|` (bitwise OR)
+8. `<`, `>`, `<=`, `>=`
+9. `==`, `!=`
+10. `&&`
+11. `\|\|`
+12. `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `\|=`, `^=`, `<<=`, `>>=`
 
 ---
 

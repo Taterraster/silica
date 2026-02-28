@@ -52,6 +52,10 @@ static void expect(Parser *p, TokenType t) {
 /* ── forward declarations ── */
 static Expr *parse_expr(Parser *p);
 static Expr *parse_assign(Parser *p);
+static Expr *parse_shift(Parser *p);
+static Expr *parse_bitand(Parser *p);
+static Expr *parse_bitxor(Parser *p);
+static Expr *parse_bitor(Parser *p);
 static Stmt *parse_stmt(Parser *p);
 static void  parse_body(Parser *p, Stmt ***stmts_out, int *nstmts_out);
 
@@ -164,6 +168,13 @@ static Expr *parse_primary(Parser *p) {
         e->rhs = parse_primary(p);
         return e;
     }
+    /* bitwise not: ~expr */
+    if (check(p, TOK_TILDE)) {
+        adv(p);
+        Expr *e = expr_new(EXPR_BITWISE_NOT);
+        e->rhs = parse_primary(p);
+        return e;
+    }
     /* unary minus */
     if (check(p, TOK_MINUS)) {
         adv(p);
@@ -185,16 +196,26 @@ static Expr *parse_primary(Parser *p) {
         e->rhs = parse_primary(p);
         return e;
     }
-    /* parenthesised expr OR type cast: (type)expr */
+    /* parenthesised expr OR type cast: (type)expr OR (type*)expr */
     if (check(p, TOK_LPAREN)) {
         adv(p);
         /* peek: is this a type cast? */
         VarType cast_vt;
+        /* capture ident name for struct pointer casts: (Node*) */
+        char cast_sname[256] = "";
+        if (cur(p)->type == TOK_IDENT)
+            strncpy(cast_sname, cur(p)->value, sizeof(cast_sname)-1);
         if (parse_type_kw(p, &cast_vt)) {
-            /* could be (int), (float), (string), etc. */
+            /* handle pointer cast: (int*) (void*) etc. */
+            int is_ptr_cast = 0;
+            if (check(p, TOK_STAR)) { adv(p); is_ptr_cast = 1; }
             expect(p, TOK_RPAREN);
             Expr *e = expr_new(EXPR_CAST);
-            e->cast_type = (int)cast_vt;
+            e->cast_type = (int)(is_ptr_cast ? TYPE_PTR : cast_vt);
+            e->ptr_base  = cast_vt;
+            /* propagate struct name for (Node*) casts */
+            if (is_ptr_cast && cast_vt == TYPE_STRUCT && cast_sname[0])
+                e->cast_struct_name = strdup(cast_sname);
             e->rhs = parse_primary(p);
             return e;
         }
@@ -358,9 +379,66 @@ static Expr *parse_add(Parser *p) {
     return left;
 }
 
+/* ── shift: << >> ── */
+static Expr *parse_shift(Parser *p) {
+    Expr *left = parse_add(p);
+    while (check(p, TOK_SHL) || check(p, TOK_SHR)) {
+        char op = check(p, TOK_SHL) ? 'L' : 'R';  /* L=shl, R=shr */
+        adv(p);
+        Expr *e = expr_new(EXPR_BINOP);
+        e->op  = op;
+        e->lhs = left;
+        e->rhs = parse_add(p);
+        left = e;
+    }
+    return left;
+}
+
+/* ── bitwise AND: & ── (lower precedence than shift) */
+static Expr *parse_bitand(Parser *p) {
+    Expr *left = parse_shift(p);
+    while (check(p, TOK_AMP)) {
+        adv(p);
+        Expr *e = expr_new(EXPR_BINOP);
+        e->op  = '&';
+        e->lhs = left;
+        e->rhs = parse_shift(p);
+        left = e;
+    }
+    return left;
+}
+
+/* ── bitwise XOR: ^ ── */
+static Expr *parse_bitxor(Parser *p) {
+    Expr *left = parse_bitand(p);
+    while (check(p, TOK_CARET)) {
+        adv(p);
+        Expr *e = expr_new(EXPR_BINOP);
+        e->op  = '^';
+        e->lhs = left;
+        e->rhs = parse_bitand(p);
+        left = e;
+    }
+    return left;
+}
+
+/* ── bitwise OR: | ── */
+static Expr *parse_bitor(Parser *p) {
+    Expr *left = parse_bitxor(p);
+    while (check(p, TOK_PIPE)) {
+        adv(p);
+        Expr *e = expr_new(EXPR_BINOP);
+        e->op  = '|';
+        e->lhs = left;
+        e->rhs = parse_bitxor(p);
+        left = e;
+    }
+    return left;
+}
+
 /* ── relational and equality comparisons ── */
 static Expr *parse_cmp(Parser *p) {
-    Expr *left = parse_add(p);
+    Expr *left = parse_bitor(p);
     for (;;) {
         char op = 0;
         /* encode ops as single chars: = (==), ! (!=), < (lt), > (gt), L (<=), G (>=) */
@@ -407,7 +485,7 @@ static Expr *parse_logical_or(Parser *p) {
     return left;
 }
 
-/* ── assignment: lhs = rhs ── */
+/* ── assignment: lhs = rhs, lhs += rhs, etc. ── */
 static Expr *parse_assign(Parser *p) {
     Expr *e = parse_logical_or(p);
     if (check(p, TOK_ASSIGN)) {
@@ -416,6 +494,26 @@ static Expr *parse_assign(Parser *p) {
         asgn->lhs = e;
         asgn->rhs = parse_assign(p);
         return asgn;
+    }
+    /* compound assignment: +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>= */
+    char cop = 0;
+    if      (check(p, TOK_PLUS_ASSIGN))    cop = '+';
+    else if (check(p, TOK_MINUS_ASSIGN))   cop = '-';
+    else if (check(p, TOK_STAR_ASSIGN))    cop = '*';
+    else if (check(p, TOK_SLASH_ASSIGN))   cop = '/';
+    else if (check(p, TOK_PERCENT_ASSIGN)) cop = '%';
+    else if (check(p, TOK_AND_ASSIGN))     cop = '&';
+    else if (check(p, TOK_OR_ASSIGN))      cop = '|';
+    else if (check(p, TOK_XOR_ASSIGN))     cop = '^';
+    else if (check(p, TOK_SHL_ASSIGN))     cop = 'L'; /* << */
+    else if (check(p, TOK_SHR_ASSIGN))     cop = 'R'; /* >> */
+    if (cop) {
+        adv(p);
+        Expr *ca = expr_new(EXPR_COMPOUND_ASSIGN);
+        ca->op  = cop;
+        ca->lhs = e;
+        ca->rhs = parse_assign(p);
+        return ca;
     }
     return e;
 }
@@ -1389,10 +1487,18 @@ static void parse_func(Parser *p, Program *prog, VarType rettype,
         }
         VarType ptr_base = ptype;
         if (check(p, TOK_STAR)) { adv(p); ptype = TYPE_PTR; }
+        /* array parameter: type[] name — treat as pointer to first elem */
+        int param_is_array = 0;
+        if (!check(p, TOK_STAR) && check(p, TOK_LBRACKET)) {
+            adv(p); /* [ */
+            if (check(p, TOK_RBRACKET)) adv(p); /* ] */
+            param_is_array = 1;
+        }
         params[nparams].type        = ptype;
         params[nparams].ptr_base    = ptr_base;
         params[nparams].struct_name = pstruct[0] ? strdup(pstruct) : NULL;
         params[nparams].name        = strdup(cur(p)->value);
+        params[nparams].is_array    = param_is_array;
         expect(p, TOK_IDENT);
         nparams++;
         if (!check(p, TOK_RPAREN)) expect(p, TOK_COMMA);

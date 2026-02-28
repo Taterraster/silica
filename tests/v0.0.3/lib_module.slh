@@ -1,0 +1,11 @@
+// lib_module.slh — a simple .slh library for the -lib test
+import std.io;
+
+int libmod_add(int a, int b) {
+    return a + b;
+}
+
+int libmod_fib(int n) {
+    if (n <= 1) { return n; }
+    return libmod_fib(n - 1) + libmod_fib(n - 2);
+}

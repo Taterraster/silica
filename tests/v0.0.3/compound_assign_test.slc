@@ -1,0 +1,23 @@
+// compound_assign_test.slc — v0.0.3: +=, -=, *=, /=, %=, bitwise compound
+import std.io;
+import std.main;
+
+main compound_assign_test() {
+    int x = 10;
+    x += 5;  io.println(x);  // 15
+    x -= 3;  io.println(x);  // 12
+    x *= 2;  io.println(x);  // 24
+    x /= 4;  io.println(x);  // 6
+    x %= 4;  io.println(x);  // 2
+
+    int b = 0xFF;
+    b &= 0x0F;   io.println(b);   // 15
+    b |= 0x10;   io.println(b);   // 31
+    b ^= 0x01;   io.println(b);   // 30
+
+    int c = 1;
+    c <<= 4;   io.println(c);  // 16
+    c >>= 2;   io.println(c);  // 4
+
+    compound_assign_test.errorcode = 0;
+}

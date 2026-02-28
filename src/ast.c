@@ -44,6 +44,7 @@ static void expr_free(Expr *e) {
     free(e->sval);
     free(e->field);
     free(e->ptr_field);
+    free(e->cast_struct_name);
     expr_free(e->object);
     expr_free(e->callee);
     for (int i = 0; i < e->argc; i++) expr_free(e->args[i]);

@@ -1,0 +1,44 @@
+// array_param_test.slc — v0.0.3: array types in function parameters
+import std.io;
+import std.main;
+
+int sum_ints(int[] arr, int n) {
+    int total = 0;
+    int i = 0;
+    while (i < n) {
+        total += arr[i];
+        i += 1;
+    }
+    return total;
+}
+
+int max_int(int[] arr, int n) {
+    int m = arr[0];
+    int i = 1;
+    while (i < n) {
+        if (arr[i] > m) {
+            m = arr[i];
+        }
+        i += 1;
+    }
+    return m;
+}
+
+void print_strings(string[] strs, int n) {
+    int i = 0;
+    while (i < n) {
+        io.println(strs[i]);
+        i += 1;
+    }
+}
+
+main array_param_test() {
+    int[] nums = {3, 1, 4, 1, 5, 9, 2, 6};
+    io.println(sum_ints(nums, 8));    // 31
+    io.println(max_int(nums, 8));     // 9
+
+    string[] words = {"apple", "banana", "cherry"};
+    print_strings(words, 3);          // apple banana cherry
+
+    array_param_test.errorcode = 0;
+}

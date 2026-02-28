@@ -1,0 +1,10 @@
+// shared_lib_test.slc — v0.0.3: compile a .slh into program, test -lib flag
+import std.io;
+import lib_module;
+import std.main;
+
+main shared_lib_test() {
+    io.println(libmod_add(7, 8));     // 15
+    io.println(libmod_fib(10));       // 55
+    shared_lib_test.errorcode = 0;
+}

@@ -38,6 +38,23 @@ typedef enum {
     TOK_EQ, TOK_NEQ,
     TOK_LT, TOK_GT, TOK_LTE, TOK_GTE,
     TOK_AND, TOK_OR, TOK_BANG,
+    /* compound assignment */
+    TOK_PLUS_ASSIGN,   /* += */
+    TOK_MINUS_ASSIGN,  /* -= */
+    TOK_STAR_ASSIGN,   /* *= */
+    TOK_SLASH_ASSIGN,  /* /= */
+    TOK_PERCENT_ASSIGN,/* %= */
+    TOK_AND_ASSIGN,    /* &= */
+    TOK_OR_ASSIGN,     /* |= */
+    TOK_XOR_ASSIGN,    /* ^= */
+    TOK_SHL_ASSIGN,    /* <<= */
+    TOK_SHR_ASSIGN,    /* >>= */
+    /* bitwise */
+    TOK_PIPE,          /* |  (bitwise OR) */
+    TOK_CARET,         /* ^  (bitwise XOR) */
+    TOK_TILDE,         /* ~  (bitwise NOT) */
+    TOK_SHL,           /* << (shift left)  */
+    TOK_SHR,           /* >> (shift right) */
     TOK_EOF, TOK_ERROR
 } TokenType;
 

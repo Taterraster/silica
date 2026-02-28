@@ -8,7 +8,7 @@
 **Compiled programming language**
 
 [![Docs](https://img.shields.io/badge/Docs-4-lightgrey?style=flat)](docs/)
-[![Version](https://img.shields.io/badge/Silica-v0.0.2-lightgrey?style=flat)](https://github.com/Taterraster/silica/releases/latest)
+[![Version](https://img.shields.io/badge/Silica-v0.0.3-lightgrey?style=flat)](https://github.com/Taterraster/silica/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 </div>
 
@@ -39,16 +39,21 @@ main hello() {
 - **Enums** — `enum Color { RED=1, GREEN, BLUE }` with auto-increment; typedef compound form
 - **Typedefs** — `typedef int i64;`, `typedef struct Foo Foo;`, inline compound forms
 - **Pointers** — `int* p = &x;`, `*p = 42;`, `void*` generic heap pointers
-- **Arrays** — heap-allocated, literal initialisation, index access
+- **Pointer casts** — `(int*)buf`, `(void*)p` typed cast syntax
+- **Arrays** — heap-allocated, literal initialisation, index access; `type[]` in function parameters
+- **String char indexing** — `string[i]` returns the byte value at position i (ASCII code)
 - **Functions** — multiple return types, overloading, full recursion with dynamic stack frames
 - **Function qualifiers** — `static` (local linkage), `inline` (inline hint), combinable
 - **Forward declarations** — `int foo(int x);` declares a function before its definition
-- **Control flow** — `if`/`else if`/`else`, `loops.while`, `loops.for`, `break`, `continue`
-- **Type casting** — `(float)n`, `(int)f`
+- **Control flow** — `if`/`else if`/`else`, `while`, `for`, `break`, `continue`; legacy `loops.while`/`loops.for` still supported
+- **Compound assignment** — `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`
+- **Bitwise operators** — `&`, `|`, `^`, `~`, `<<`, `>>`
+- **Hex literals** — `0xFF`, `0x1000`, `0xDEAD`
+- **Type casting** — `(float)n`, `(int)f`, `(int*)buf`
 - **OOP** — `class` with `public`/`private` blocks, `new ClassName obj;`, method dispatch, `extends` inheritance, method override, encapsulation
 - **Inline assembly** — `asm("movq $1, %rax");` requires `import std.external.asm;`
 - **`import std;`** — imports all stdlib modules at once
-- **Modules** — `.slh` header libraries and `.slc` compiled modules
+- **Modules** — `.slh` header libraries, `.slc` compiled modules, `.so` shared library imports
 - **REPL** — interactive session with persistent state
 - **Standard library** — `std.io`, `std.math`, `std.str`, `std.fs`, `std.mem`, `std.time`, `std.net`, `std.env`, `std.proc`
 
@@ -70,6 +75,9 @@ make clean        # removes build/
 
 ```bash
 ./build/silicac source.slc -o binary    # compile to binary
+./build/silicac source.slc -c           # compile to .o object
+./build/silicac source.slc -lib         # compile to linkable .o library
+./build/silicac source.slc -shared      # compile to .so shared library
 ./build/silicac --tokens source.slc     # dump token stream
 ./build/silicac --ast source.slc        # dump AST
 ./build/silicac --asm source.slc        # dump generated assembly
@@ -192,18 +200,46 @@ if (score >= 90) {
 }
 
 // counted loop
-loops.for(5) { io.println("tick"); }
+for (5) { io.println("tick"); }
 
 // conditional loop
 int i = 0;
-loops.while(i < 10) {
-    int i = i + 1;
+while (i < 10) {
+    i += 1;
 }
 
 // infinite loop with break
-loops.while(true) {
+while (true) {
     if (done) { break; }
 }
+```
+
+### Compound assignment
+
+```silica
+int x = 10;
+x += 5;   // 15
+x -= 3;   // 12
+x *= 2;   // 24
+x /= 4;   // 6
+x %= 4;   // 2
+```
+
+### Bitwise operators and hex literals
+
+```silica
+int mask = 0xFF;          // 255
+int lo   = mask & 0x0F;   // 15
+int hi   = mask | 0x100;  // 511
+int flip = mask ^ 0x0F;   // 240
+int inv  = ~0;            // -1
+int shl  = 1 << 4;        // 16
+int shr  = 256 >> 3;      // 32
+
+// compound bitwise assign
+int flags = 0;
+flags |= (1 << 3);        // set bit 3
+flags &= ~(1 << 3);       // clear bit 3
 ```
 
 ### Arrays
@@ -233,7 +269,7 @@ main example() {
 
 | Module      | What it provides |
 |-------------|-----------------|
-| `std.io`    | `print`, `println`, `input`, `inputln` |
+| `std.io`    | `print`, `println`, `eprint`, `eprintln`, `input`, `inputln` |
 | `std.math`  | `sqrt`, `sin`, `cos`, `log`, `pwr`, `root`, `sigma`, `integral`, `random`, constants `pi`/`e` |
 | `std.str`   | `length`, `concat`, `contains`, `slice`, `upper`, `lower`, `trim`, `repeat`, `from_int`, `to_int`, `eq` |
 | `std.fs`    | `create`, `open`, `close`, `write`, `read_all`, `size`, `append`, `read`, `delete` |
@@ -260,7 +296,7 @@ silica/
 │   ├── ast.c/h       AST node types and helpers
 │   └── codegen.c/h   AST → x86-64 AT&T assembly
 ├── build/            compiler binary + object files (generated)
-├── tests/            33 .slc test programs + .slh libraries
+├── tests/            41 .slc test programs + .slh libraries
 └── docs/             full documentation
     ├── getting-started.md
     ├── language-reference.md
@@ -298,7 +334,7 @@ Full docs are in [`docs/`](docs/):
 ## Bootstrapping path
 
 ```
-Stage 0: silicac (C)      ← current
-Stage 1: silicac.slc      compile Stage 0 with Stage 0
+Stage 0: silicac (C)      ← current  [v0.0.3]
+Stage 1: silicac.slc      compile Stage 0 with Stage 0  ← next
 Stage 2: self-hosting     Stage 1 compiles Stage 1
 ```

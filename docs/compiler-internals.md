@@ -409,6 +409,77 @@ Handled entirely inside codegen — `import std.io;` sets `cg->using_io = 1`. No
 4. Add the `.o` to the link command
 5. The stub functions are present in the codegen's function table so call sites can resolve — but their bodies are not emitted (guarded by `if (!fd->is_extern)`)
 
+### `.so` shared library imports
+
+`import mylib.so;` triggers dynamic linking:
+
+1. Search for `mylib.so` in the source directory, `./`, then `/usr/lib/x86_64-linux-gnu/` and `/usr/lib/`
+2. Record the full path in `extra_so_paths[]`
+3. At link time, if any `.so` paths are present the linker is invoked **without** `-static`, and the `.so` paths are passed directly to `ld`
+
+### Output modes
+
+| Flag | Output | Description |
+|---|---|---|
+| *(none)* | ELF binary | Statically linked executable |
+| `-c` | `.o` | Relocatable object file |
+| `-lib` | `.o` | Relocatable `.o` with plain symbol names for C/C++ interop |
+| `-shared` | `.so` | Shared ELF library (`ld -shared`) with plain symbol names |
+| `-S` | `.s` | AT&T x86-64 assembly |
+
+### Symbol naming and C/C++ interop
+
+By default Silica prefixes all user function symbols with `__silica_user_` to avoid collisions in mixed-language builds:
+
+```
+lib_add  →  __silica_user_lib_add
+```
+
+When `-lib` or `-shared` is passed, `lib_mode = 1` is set in the `CG` struct and `func_label()` emits the bare function name instead:
+
+```
+lib_add  →  lib_add
+```
+
+This makes Silica libraries directly callable from C and C++ without any name translation. The `lib_mode` flag is propagated from the top-level `CG` into every per-function sub-`CG` created by `emit_func()`.
+
+**Calling convention** (SysV x86-64 ABI):
+
+| Silica type | C declaration | Passed/returned via |
+|---|---|---|
+| `int`, `bool`, `byte` | `long` | `rdi`/`rsi`/... → `rax` |
+| `void*`, pointer | `void*` / `long*` | `rdi`/`rsi`/... → `rax` |
+| `string` | `struct { const char* ptr; long len; }` | ptr → `rax`, len → `rdx` |
+
+**C usage:**
+```c
+extern long lib_add(long a, long b);
+typedef struct { const char *ptr; long len; } SilicaString;
+extern SilicaString lib_version(void);
+```
+
+**C++ usage** — wrap in `extern "C"` to suppress name mangling:
+```cpp
+extern "C" {
+    long lib_add(long a, long b);
+    struct SilicaString { const char *ptr; long len; };
+    SilicaString lib_version();
+}
+```
+
+**Static linking** (`.o`):
+```bash
+silicac mylib.slc -lib -o mylib.o
+gcc -o myapp myapp.c mylib.o
+```
+
+**Dynamic linking** (`.so`):
+```bash
+silicac mylib.slc -shared -o libmylib.so
+gcc -o myapp myapp.c libmylib.so
+LD_LIBRARY_PATH=. ./myapp
+```
+
 ---
 
 ## Runtime helpers

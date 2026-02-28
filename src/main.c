@@ -161,6 +161,11 @@ static char *compile_module_obj(const char *slc_path) {
     return strdup(obj);
 }
 
+/* extra_so: accumulate .so paths for dynamic linking */
+static char *extra_so_paths[64];
+static int   n_extra_so = 0;
+static char  extra_so_dirs[64][512];
+
 static int resolve_imports(Program *prog, const char *base_dir,
                             char **extra_objs, int *n_extra) {
     for(int i=0;i<prog->nimports;i++) {
@@ -170,6 +175,40 @@ static int resolve_imports(Program *prog, const char *base_dir,
             strcmp(mod,"std.main")==0 || strcmp(mod,"std.loops")==0) continue;
 
         char path[512];
+
+        /* ── .so import: "import mylib.so;" ──
+         * The module name ends with ".so" — treat as a pre-built shared library.
+         * Strip the trailing ".so" to find the base name, then search for the file. */
+        size_t mlen = strlen(mod);
+        if (mlen > 3 && strcmp(mod + mlen - 3, ".so") == 0) {
+            /* Try base_dir/mod, then ./mod, then system paths via ldconfig */
+            snprintf(path, sizeof(path), "%s/%s", base_dir, mod);
+            if (access(path, R_OK) != 0) {
+                snprintf(path, sizeof(path), "./%s", mod);
+                if (access(path, R_OK) != 0) {
+                    /* fallback: system library path (e.g. /usr/lib/x86_64-linux-gnu/) */
+                    snprintf(path, sizeof(path), "/usr/lib/x86_64-linux-gnu/%s", mod);
+                    if (access(path, R_OK) != 0) {
+                        snprintf(path, sizeof(path), "/usr/lib/%s", mod);
+                        if (access(path, R_OK) != 0) {
+                            fprintf(stderr, "[silicac] Cannot find shared library '%s'\n", mod);
+                            return 1;
+                        }
+                    }
+                }
+            }
+            if (n_extra_so < 64) {
+                extra_so_paths[n_extra_so] = strdup(path);
+                /* record directory for -rpath */
+                char dir_copy[512]; strncpy(dir_copy, path, sizeof(dir_copy)-1);
+                char *sl = strrchr(dir_copy, '/');
+                if (sl) { *sl = '\0'; strncpy(extra_so_dirs[n_extra_so], dir_copy, 511); }
+                else strncpy(extra_so_dirs[n_extra_so], ".", 511);
+                n_extra_so++;
+            }
+            printf("[silicac] Linked shared library: %s\n", path);
+            continue;
+        }
 
         /* try .slh library */
         if (find_module(base_dir, mod, ".slh", path, sizeof(path))) {
@@ -349,6 +388,9 @@ static void run_repl(void) {
  * ========================================================================== */
 
 int main(int argc, char **argv) {
+    /* reset shared-lib state (global, may be reused in recursive module compiles) */
+    n_extra_so = 0;
+
     /* record own path for module self-compilation */
     if (argc > 0) {
         strncpy(self_path, argv[0], sizeof(self_path)-1);
@@ -361,7 +403,7 @@ int main(int argc, char **argv) {
 
     int flag_tokens=0, flag_ast=0, flag_asm_only=0;
     int flag_obj_only=0, flag_help=0, flag_repl=0;
-	int flag_version=0;
+    int flag_version=0, flag_lib=0, flag_shared=0;
     const char *input=NULL, *output=NULL;
 
     for (int i=1;i<argc;i++) {
@@ -369,36 +411,45 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i],"--ast"))    flag_ast=1;
         else if (!strcmp(argv[i],"-S"))       flag_asm_only=1;
         else if (!strcmp(argv[i],"-c"))       flag_obj_only=1;
+        else if (!strcmp(argv[i],"-lib"))     { flag_lib=1; flag_obj_only=1; }
+        else if (!strcmp(argv[i],"-shared"))  flag_shared=1;
         else if (!strcmp(argv[i],"--repl"))   flag_repl=1;
         else if (!strcmp(argv[i],"--help")||!strcmp(argv[i],"-h")) flag_help=1;
-		else if (strcmp(argv[i], "--version")   == 0 ||
-                 strcmp(argv[i], "-v")       == 0 ||
-		         strcmp(argv[i], "-version")   == 0 ||
-                 strcmp(argv[i], "--v")       == 0) flag_version = 1;
+        else if (!strcmp(argv[i],"--version")||!strcmp(argv[i],"-v")||
+                 !strcmp(argv[i],"-version") ||!strcmp(argv[i],"--v")) flag_version=1;
         else if (!strcmp(argv[i],"-o")&&i+1<argc) output=argv[++i];
         else if (argv[i][0]!='-') input=argv[i];
     }
 
     if (flag_repl) { run_repl(); return 0; }
-	if (flag_version){
-		puts("silicac -- Silica Language Compiler Snapshot v0.0.2-a");
-		return 0;
-	}
+    if (flag_version) {
+        puts("silicac -- Silica Language Compiler v0.0.3");
+        return 0;
+    }
     if (flag_help) {
         puts(
-            "silicac -- Silica Language Compiler Snapshot v0.0.2-a\n"
+            "silicac -- Silica Language Compiler v0.0.3\n"
             "\n"
             "Usage:\n"
             "  silicac <source.slc>               Compile to ./a.out\n"
             "  silicac <source.slc> -o <out>      Compile to named binary\n"
             "  silicac <source.slc> -c            Compile+assemble to .o\n"
+            "  silicac <source.slc> -lib           Compile to relocatable .o (for linking)\n"
+            "  silicac <source.slc> -shared        Compile to shared .so library\n"
             "  silicac <source.slc> -S            Emit assembly only\n"
             "  silicac --tokens <source.slc>      Dump token stream\n"
             "  silicac --ast    <source.slc>      Dump AST\n"
             "  silicac --repl                     Interactive REPL\n"
-			"  silicac -v or --version            Show version\n"
-			"  silicac -h or --help               Show this message"
-			);
+            "  silicac -v or --version            Show version\n"
+            "  silicac -h or --help               Show this message\n"
+            "\n"
+            "Module system:\n"
+            "  import mylib;    Import mylib.slh (library) or mylib.slc (module)\n"
+            "  import mylib.so; Link against pre-built mylib.so shared library\n"
+            "  .slh files       Silica Library Header: functions only, no main\n"
+            "  .slc modules     Compiled separately and linked in\n"
+            "  .so files        Pre-built shared libraries\n"
+        );
         return 0;
     }
 	
@@ -449,7 +500,7 @@ int main(int argc, char **argv) {
 
     FILE *asm_f = fopen(asm_path,"w");
     if (!asm_f) { perror(asm_path); return 1; }
-    int cg_err = codegen_emit(prog,asm_f);
+    int cg_err = codegen_emit(prog, asm_f, flag_lib || flag_shared);
     fclose(asm_f);
     if (cg_err) {
         remove(asm_path);
@@ -467,17 +518,42 @@ int main(int argc, char **argv) {
     if (flag_obj_only && output) strncpy(obj_path,output,sizeof(obj_path)-1);
     else replace_ext(input,".o",obj_path,sizeof(obj_path));
 
-    char cmd[2048];
+    char cmd[4096];
     snprintf(cmd,sizeof(cmd),"as --64 -o %s %s",obj_path,asm_path);
     if (system(cmd)!=0) { fprintf(stderr,"[silicac] Assembler failed.\n"); return 1; }
     remove(asm_path);
 
     if (flag_obj_only) {
         printf("[silicac] Object written to %s\n",obj_path);
+        if (flag_lib) printf("[silicac] Linkable library: use 'ld -r' or link into your binary\n");
         program_free(prog); free(src); return 0;
     }
 
-    /* link — include extra module .o files */
+    /* shared library: -shared produces a .so */
+    if (flag_shared) {
+        const char *so_path = output ? output : "a.so";
+        char obj_list2[2048]; strncpy(obj_list2,obj_path,sizeof(obj_list2)-1);
+        for (int i=0;i<n_extra;i++) {
+            strncat(obj_list2," ",sizeof(obj_list2)-strlen(obj_list2)-1);
+            strncat(obj_list2,extra_objs[i],sizeof(obj_list2)-strlen(obj_list2)-1);
+        }
+        /* add any .so deps */
+        for (int i=0;i<n_extra_so;i++) {
+            strncat(obj_list2," ",sizeof(obj_list2)-strlen(obj_list2)-1);
+            strncat(obj_list2,extra_so_paths[i],sizeof(obj_list2)-strlen(obj_list2)-1);
+        }
+        char cmd2[2048];
+        snprintf(cmd2,sizeof(cmd2),"ld -shared -o %s %s -z noexecstack",so_path,obj_list2);
+        if (system(cmd2)!=0) { fprintf(stderr,"[silicac] Shared link failed.\n"); return 1; }
+        chmod(so_path,0755);
+        remove(obj_path);
+        for (int i=0;i<n_extra;i++) { remove(extra_objs[i]); free(extra_objs[i]); }
+        for (int i=0;i<n_extra_so;i++) { free(extra_so_paths[i]); }
+        printf("[silicac] Shared library: %s --> %s\n",input,so_path);
+        program_free(prog); free(src); return 0;
+    }
+
+    /* link — include extra module .o files and any .so deps */
     const char *out_path = output ? output : "a.out";
     char obj_list[2048]; strncpy(obj_list,obj_path,sizeof(obj_list)-1);
     for (int i=0;i<n_extra;i++) {
@@ -485,12 +561,30 @@ int main(int argc, char **argv) {
         strncat(obj_list,extra_objs[i],sizeof(obj_list)-strlen(obj_list)-1);
     }
 
-    snprintf(cmd,sizeof(cmd),"ld -o %s -static %s --entry _start -z noexecstack",
-             out_path,obj_list);
-    if (system(cmd)!=0) { fprintf(stderr,"[silicac] Linker failed.\n"); return 1; }
+    /* build rpath and -L/-l flags for any .so imports */
+    char so_flags[2048] = "";
+    for (int i=0;i<n_extra_so;i++) {
+        char flag[1024];
+        /* use full path directly */
+        snprintf(flag, sizeof(flag), " %s", extra_so_paths[i]);
+        strncat(so_flags, flag, sizeof(so_flags)-strlen(so_flags)-1);
+    }
+
+    char link_cmd[4096];
+    if (n_extra_so > 0) {
+        /* dynamic link when .so files are present */
+        snprintf(link_cmd,sizeof(link_cmd),"ld -o %s %s%s --entry _start -z noexecstack",
+                 out_path,obj_list,so_flags);
+    } else {
+        snprintf(link_cmd,sizeof(link_cmd),"ld -o %s -static %s --entry _start -z noexecstack",
+                 out_path,obj_list);
+    }
+    if (system(link_cmd)!=0) { fprintf(stderr,"[silicac] Linker failed.\n"); return 1; }
     chmod(out_path,0755);
     remove(obj_path);
     for (int i=0;i<n_extra;i++) { remove(extra_objs[i]); free(extra_objs[i]); }
+    for (int i=0;i<n_extra_so;i++) { free(extra_so_paths[i]); }
+    n_extra_so = 0;
 
     printf("[silicac] Compiled %s --> %s\n",input,out_path);
     program_free(prog); free(src);

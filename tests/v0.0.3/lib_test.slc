@@ -1,0 +1,17 @@
+// lib_test.slc — v0.0.3: -lib flag, library .o file
+// This file contains only functions (no main) so it can be compiled
+// with -lib to produce a linkable .o
+
+import std.io;
+
+int lib_add(int a, int b) {
+    return a + b;
+}
+
+int lib_mul(int a, int b) {
+    return a * b;
+}
+
+string lib_version() {
+    return "libtest v1.0";
+}
