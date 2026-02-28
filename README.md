@@ -1,4 +1,4 @@
-# Silica O=Si=O
+# Silica
 <p align="center">
     <img src="logo.png" width="400"/>
 <p>
@@ -9,7 +9,7 @@
 
 [![Docs](https://img.shields.io/badge/Docs-4-lightgrey?style=flat)](docs/)
 [![Version](https://img.shields.io/badge/Silica-v0.0.2-lightgrey?style=flat)](https://github.com/Taterraster/silica/releases/latest)
-[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENCE)
+[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 </div>
 
 A statically typed, compiled programming language that targets x86-64 Linux. The compiler produces standalone ELF binaries with **zero external dependencies** — no libc, no runtime, all I/O through raw Linux syscalls.
