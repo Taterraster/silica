@@ -1,0 +1,24 @@
+// Test: import std; enables all stdlib modules at once
+import std;
+import std.main;
+
+main std_all() {
+    // io
+    io.println("io works");
+
+    // math
+    io.println(math.sqrt(9));
+
+    // str
+    string s = str.concat("hello", " world");
+    io.println(s);
+    io.println(str.length(s));
+
+    // mem
+    void* buf = mem.alloc(64, 0);
+    if (buf > 0) {
+        io.println("mem works");
+    }
+
+    std_all.errorcode = 0;
+}

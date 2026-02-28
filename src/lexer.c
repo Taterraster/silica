@@ -107,6 +107,14 @@ static struct { const char *kw; TokenType t; } kwtab[] = {
     {"typedef",TOK_TYPEDEF},
     {"static", TOK_STATIC},
     {"inline", TOK_INLINE},
+    {"for",    TOK_FOR},
+    {"while",  TOK_WHILE},
+    {"asm",    TOK_ASM},
+    {"class",  TOK_CLASS},
+    {"public", TOK_PUBLIC},
+    {"private",TOK_PRIVATE},
+    {"new",    TOK_NEW},
+    {"extends",TOK_EXTENDS},
     {"true",   TOK_TRUE},   {"false",  TOK_FALSE},
     {"return", TOK_RETURN},
     {"if",     TOK_IF},     {"else",   TOK_ELSE},
@@ -148,6 +156,7 @@ Token lexer_next(Lexer *l) {
         case '[': return mktok(TOK_LBRACKET,  strdup("["), line, col);
         case ']': return mktok(TOK_RBRACKET,  strdup("]"), line, col);
         case ';': return mktok(TOK_SEMICOLON, strdup(";"), line, col);
+        case ':': return mktok(TOK_COLON,     strdup(":"), line, col);
         case '.': return mktok(TOK_DOT,       strdup("."), line, col);
         case ',': return mktok(TOK_COMMA,     strdup(","), line, col);
         case '=':
@@ -243,6 +252,15 @@ const char *token_type_name(TokenType t) {
         case TOK_TYPEDEF:    return "typedef";
         case TOK_STATIC:     return "static";
         case TOK_INLINE:     return "inline";
+        case TOK_FOR:        return "for";
+        case TOK_WHILE:      return "while";
+        case TOK_ASM:        return "asm";
+        case TOK_CLASS:      return "class";
+        case TOK_PUBLIC:     return "public";
+        case TOK_PRIVATE:    return "private";
+        case TOK_NEW:        return "new";
+        case TOK_EXTENDS:    return "extends";
+        case TOK_COLON:      return ":";
         case TOK_EOF:        return "EOF";
         default:             return "ERROR";
     }

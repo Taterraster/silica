@@ -38,39 +38,39 @@ main test() {
     if(x <= 9) { io.println("WRONG"); }
     if(x != 5) { io.println("x != 5"); }
 
-    // ── loops.while(N) ──
+    // ── while(N) ──
     io.println("=== while(3) ===");
-    loops.while(3) {
+    while(3) {
         io.println("tick");
     }
 
-    // ── loops.while(expr) ──
+    // ── while(expr) ──
     io.println("=== while(expr) ===");
     int i = 0;
-    loops.while(i < 4) {
+    while(i < 4) {
         io.print("i = ");
         io.println(i);
         int i = i + 1;
     }
 
-    // ── loops.while(true) with exit via variable ──
+    // ── while(true) with exit via variable ──
     io.println("=== while(true) ===");
     int alive = 1;
-    loops.while(alive) {
+    while(alive) {
         io.println("looping");
         int alive = 0;
     }
 
-    // ── loops.for(N) ──
+    // ── for(N) ──
     io.println("=== for(4) ===");
-    loops.for(4) {
+    for(4) {
         io.println("for-tick");
     }
 
-    // ── loops.for(expr) ──
+    // ── for(expr) ──
     io.println("=== for(expr) ===");
     int j = 3;
-    loops.for(j > 0) {
+    for(j > 0) {
         io.print("j = ");
         io.println(j);
         int j = j - 1;

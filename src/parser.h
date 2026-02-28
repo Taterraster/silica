@@ -16,6 +16,12 @@ typedef struct {
     int          ntypedefs;
     EnumDecl    *enums[128];
     int          nenums;
+    ClassDecl   *classes[64];
+    int          nclasses;
+    char        *inst_names[256];
+    char        *inst_classes[256];
+    int          ninst;
+    ClassDecl   *cur_class;
 } Parser;
 
 void     parser_init(Parser *p, const char *src);

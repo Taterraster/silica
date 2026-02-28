@@ -33,6 +33,9 @@ main hello() {
 - **Forward declarations** — `int foo(int x);` declares a function before its definition
 - **Control flow** — `if`/`else if`/`else`, `loops.while`, `loops.for`, `break`, `continue`
 - **Type casting** — `(float)n`, `(int)f`
+- **OOP** — `class` with `public`/`private` blocks, `new ClassName obj;`, method dispatch, `extends` inheritance, method override, encapsulation
+- **Inline assembly** — `asm("movq $1, %rax");` requires `import std.external.asm;`
+- **`import std;`** — imports all stdlib modules at once
 - **Modules** — `.slh` header libraries and `.slc` compiled modules
 - **REPL** — interactive session with persistent state
 - **Standard library** — `std.io`, `std.math`, `std.str`, `std.fs`, `std.mem`, `std.time`, `std.net`, `std.env`, `std.proc`
@@ -245,7 +248,7 @@ silica/
 │   ├── ast.c/h       AST node types and helpers
 │   └── codegen.c/h   AST → x86-64 AT&T assembly
 ├── build/            compiler binary + object files (generated)
-├── tests/            27 .slc test programs + .slh libraries
+├── tests/            33 .slc test programs + .slh libraries
 └── docs/             full documentation
     ├── getting-started.md
     ├── language-reference.md

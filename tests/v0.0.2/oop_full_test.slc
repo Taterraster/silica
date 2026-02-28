@@ -1,0 +1,98 @@
+// Comprehensive OOP test: instances, encapsulation, inheritance
+import std.io;
+import std.main;
+
+// ── Encapsulation ──
+class BankAccount {
+    public {
+        int get_balance() {
+            return self->balance;
+        }
+        void deposit(int amount) {
+            self->balance = self->balance + amount;
+        }
+        bool can_withdraw(int amount) {
+            return self->balance >= amount;
+        }
+    }
+    private {
+        int balance;
+        void set_balance(int n) {
+            self->balance = n;
+        }
+    }
+}
+
+// ── Base class ──
+class Shape {
+    public {
+        int sides;
+        void set_sides(int n) {
+            self->sides = n;
+        }
+        int get_sides() {
+            return self->sides;
+        }
+        string describe() {
+            return "shape";
+        }
+    }
+}
+
+// ── Inheritance + method override ──
+class Triangle extends Shape {
+    public {
+        void init() {
+            self->sides = 3;
+        }
+        string describe() {
+            return "triangle";
+        }
+    }
+}
+
+class Square extends Shape {
+    public {
+        void init() {
+            self->sides = 4;
+        }
+        string describe() {
+            return "square";
+        }
+    }
+}
+
+main oop_full() {
+    // Instances + encapsulation
+    new BankAccount acct;
+    acct.deposit(100);
+    acct.deposit(50);
+    io.println(acct.get_balance());     // 150
+    io.println(acct.can_withdraw(200)); // 0 (false)
+    io.println(acct.can_withdraw(50));  // 1 (true)
+
+    // Multiple independent instances
+    new BankAccount acct2;
+    acct2.deposit(1000);
+    io.println(acct2.get_balance());   // 1000
+    io.println(acct.get_balance());    // still 150
+
+    // Inheritance: Shape base
+    new Shape s;
+    s.set_sides(6);
+    io.println(s.get_sides());         // 6
+
+    // Triangle inherits set_sides/get_sides, overrides describe
+    new Triangle t;
+    t.init();
+    io.println(t.get_sides());         // 3 (inherited)
+    io.println(t.describe());          // triangle (overridden)
+
+    // Square
+    new Square sq;
+    sq.init();
+    io.println(sq.get_sides());        // 4 (inherited)
+    io.println(sq.describe());         // square (overridden)
+
+    oop_full.errorcode = 0;
+}

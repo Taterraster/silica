@@ -31,6 +31,10 @@ TypedefDecl *typedefdecl_new(void) {
     return calloc(1, sizeof(TypedefDecl));
 }
 
+ClassDecl *classdecl_new(void) {
+    return calloc(1, sizeof(ClassDecl));
+}
+
 Program *program_new(void) {
     return calloc(1, sizeof(Program));
 }
@@ -53,6 +57,8 @@ static void stmt_free(Stmt *s) {
     if (!s) return;
     free(s->varname);
     free(s->struct_name);
+    free(s->asm_code);
+    free(s->class_name);
     expr_free(s->init);
     expr_free(s->expr);
     expr_free(s->cond);
@@ -96,6 +102,26 @@ void program_free(Program *p) {
         free(td);
     }
     free(p->typedefs);
+    for (int i = 0; i < p->nclasses; i++) {
+        ClassDecl *cd = p->classes[i];
+        free(cd->name);
+        free(cd->extends_name);
+        for (int j = 0; j < cd->nfields; j++) {
+            free(cd->fields[j].name);
+            free(cd->fields[j].struct_name);
+        }
+        free(cd->fields);
+        for (int j = 0; j < cd->nmethods; j++) {
+            ClassMethod *cm = &cd->methods[j];
+            free(cm->name);
+            /* NOTE: cm->params and cm->stmts are shared with the corresponding
+             * FuncDecl in prog->funcs, which owns and frees them.
+             * Do NOT free them here to avoid double-free. */
+        }
+        free(cd->methods);
+        free(cd);
+    }
+    free(p->classes);
     if (p->mainfn) {
         free(p->mainfn->name);
         for (int i = 0; i < p->mainfn->nstmts; i++) stmt_free(p->mainfn->stmts[i]);
@@ -106,13 +132,16 @@ void program_free(Program *p) {
         FuncDecl *f = p->funcs[i];
         if (!f) continue;
         free(f->name);
-        for (int j = 0; j < f->nparams; j++) {
-            free(f->params[j].name);
-            free(f->params[j].struct_name);
+        /* is_alias: stmts and params are shared with parent class — do NOT free them */
+        if (!f->is_alias) {
+            for (int j = 0; j < f->nparams; j++) {
+                free(f->params[j].name);
+                free(f->params[j].struct_name);
+            }
+            free(f->params);
+            for (int j = 0; j < f->nstmts; j++) stmt_free(f->stmts[j]);
+            free(f->stmts);
         }
-        free(f->params);
-        for (int j = 0; j < f->nstmts; j++) stmt_free(f->stmts[j]);
-        free(f->stmts);
         free(f);
     }
     free(p->funcs);

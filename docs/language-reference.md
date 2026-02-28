@@ -19,6 +19,8 @@ Silica is a statically typed, compiled language targeting x86-64 Linux. It compi
 11. [Arrays](#arrays)
 12. [Type Casting](#type-casting)
 13. [Comments](#comments)
+14. [OOP — Classes](#oop--classes)
+15. [Inline Assembly](#inline-assembly)
 
 ---
 
@@ -786,3 +788,151 @@ int x = 42; // end-of-line comment
 ```
 
 There are no block comments.
+
+---
+
+## OOP — Classes
+
+Silica supports object-oriented programming through `class` declarations. Each class has `public` and `private` access blocks. Methods receive an implicit `self` pointer to the instance. Instances are allocated on the stack with `new`.
+
+### Class declaration
+
+```silica
+class BankAccount {
+    public {
+        int get_balance() {
+            return self->balance;
+        }
+        void deposit(int amount) {
+            self->balance = self->balance + amount;
+        }
+    }
+    private {
+        int balance;
+    }
+}
+```
+
+- `public { }` — fields and methods accessible from outside the class
+- `private { }` — fields and methods only accessible from within the class
+- Fields are declared as `type name;` (no initialiser — zero on construction)
+- Methods have a hidden first parameter `ClassName* self` — use `self->field` to access fields
+
+### Creating instances
+
+```silica
+new BankAccount acct;   // allocates on stack, zero-initialises fields
+acct.deposit(100);
+io.println(acct.get_balance());   // 100
+```
+
+`new ClassName varName;` allocates the instance on the stack and zero-initialises all fields. If the class defines a method named `__init`, it is called automatically.
+
+### Encapsulation
+
+Private members are not accessible from outside the class body. Accessing a private field or calling a private method from outside its class is a compile-time error.
+
+```silica
+class Counter {
+    public {
+        int get() { return self->count; }
+        void inc() { self->count = self->count + 1; }
+    }
+    private {
+        int count;
+    }
+}
+
+main example() {
+    new Counter c;
+    c.inc();
+    c.inc();
+    io.println(c.get());   // 2
+    // c.count = 0;        // error: private field
+    example.errorcode = 0;
+}
+```
+
+### Inheritance
+
+A class can extend a parent class using `extends`. The child inherits all parent fields (prepended to its own layout) and all parent methods not overridden by the child.
+
+```silica
+class Animal {
+    public {
+        int age;
+        void set_age(int a) { self->age = a; }
+        int  get_age()      { return self->age; }
+        void speak()        { io.println("..."); }
+    }
+}
+
+class Dog extends Animal {
+    public {
+        int tricks;
+        void speak() {               // overrides Animal.speak
+            io.println("Woof!");
+        }
+        void learn_trick() {
+            self->tricks = self->tricks + 1;
+        }
+    }
+}
+
+main example() {
+    new Dog d;
+    d.set_age(3);             // inherited from Animal
+    io.println(d.get_age());  // 3
+    d.speak();                // Woof! (overridden)
+    d.learn_trick();
+    io.println(d.tricks);     // 1
+    example.errorcode = 0;
+}
+```
+
+- `class Child extends Parent` or `class Child : Parent` both work
+- Inherited fields come first in the memory layout
+- Inherited methods not overridden are automatically available on the child
+- Overridden methods replace the parent's implementation
+
+### Multiple instances
+
+Each `new` creates a fully independent instance:
+
+```silica
+new Counter a;
+new Counter b;
+a.inc(); a.inc();
+b.inc();
+io.println(a.get());   // 2
+io.println(b.get());   // 1
+```
+
+---
+
+## Inline Assembly
+
+The `asm()` statement emits a single line of AT&T-syntax x86-64 assembly verbatim into the current function body. It requires `import std.external.asm;`.
+
+```silica
+import std.external.asm;
+
+// ...
+
+asm("movq $42, %rax");
+asm("pushq %rbx");
+asm("nop");
+```
+
+Multiple `asm()` calls produce consecutive lines:
+
+```silica
+asm("movq $42, %rax");
+asm("movq %rax, -8(%rbp)");   // store to first local variable slot
+```
+
+**Notes:**
+- The string argument must be a string literal — not a variable
+- No register allocation or ABI enforcement is done — it is your responsibility to save/restore any clobbered registers
+- Variable slots are at `rbp - offset` — use `--asm` output to see exact offsets
+- `asm()` is disabled unless `import std.external.asm;` is present

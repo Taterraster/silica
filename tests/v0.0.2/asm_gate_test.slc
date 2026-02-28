@@ -1,0 +1,21 @@
+// Test that asm() requires import std.external.asm
+import std.io;
+import std.external.asm;
+import std.main;
+
+main asm_gate() {
+    // Basic inline asm: set rax=42 via asm, 
+    // store to our variable via a second asm
+    int val = 0;
+    asm("movq $42, %rax");
+    asm("movq %rax, -8(%rbp)");   // spill rax to val's slot
+    io.println(val);               // 42
+
+    // Multiple asm lines
+    asm("movq $7, %rax");
+    asm("movq %rax, -8(%rbp)");
+    io.println(val);               // 7
+
+    io.println("asm ok");
+    asm_gate.errorcode = 0;
+}

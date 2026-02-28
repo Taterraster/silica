@@ -62,6 +62,7 @@ typedef struct {
     int   using_proc;    /* import std.proc; */
     int   using_str;     /* import std.str;  */
     int   using_env;     /* import std.env;  */
+    int   using_asm;     /* import std.external.asm; */
     int   had_error;     /* set to 1 on import gate violation → compilation fails */
     int   exit_code;
     int   stack_used;
@@ -197,6 +198,11 @@ static FuncDecl *find_userfunc_overload(CG *cg, const char *name, int argc, Expr
 /* Type char for mangling — duplicate removed, definition is above */
 /* Build mangled label: no overloads = plain, overloaded = type-sig suffix */
 static void func_label(CG *cg, FuncDecl *fd, char *out, int n) {
+    /* Class methods already have a unique mangled name — use it directly */
+    if (strncmp(fd->name, "__class_", 8) == 0) {
+        snprintf(out, n, "%s", fd->name);
+        return;
+    }
     int ov = 0;
     for (int i = 0; i < cg->nfuncs; i++)
         if (cg->funcs[i] != fd && strcmp(cg->funcs[i]->name, fd->name) == 0) { ov=1; break; }
@@ -3022,6 +3028,37 @@ static void emit_stmt(CG *cg, Stmt *s) {
             break;
         }
 
+        case STMT_ASM:
+            /* Emit raw assembly line verbatim */
+            fprintf(cg->out, "    %s\n", s->asm_code ? s->asm_code : "");
+            break;
+
+        case STMT_NEW: {
+            /* new ClassName varName;
+             * Allocates the class instance as a struct on the stack.
+             * The variable is already registered by the parser.
+             * We need to zero-initialise the struct fields.
+             * Also calls __class_ClassName___init(self) if it exists. */
+            StructDecl *sd = find_struct(cg, s->class_name);
+            int total = sd ? sd->total_size : 8;
+            int idx = alloc_struct_var(cg, s->varname, s->class_name, total);
+            Var *v  = &cg->vars[idx];
+            fprintf(cg->out, "    /* new %s %s at rbp-%d (size=%d) */\n",
+                    s->class_name, s->varname, v->offset, total);
+            for (int i = 0; i < total; i += 8)
+                fprintf(cg->out, "    movq $0, -%d(%%rbp)\n", v->offset - i);
+            /* Call __init if it exists */
+            char init_name[512];
+            snprintf(init_name, sizeof(init_name), "__class_%s___init", s->class_name);
+            FuncDecl *init_fd = find_userfunc(cg, init_name);
+            if (init_fd) {
+                /* pass &self as first arg */
+                fprintf(cg->out, "    leaq -%d(%%rbp), %%rdi\n", v->offset);
+                fprintf(cg->out, "    callq %s\n", init_name);
+            }
+            break;
+        }
+
         case STMT_EXPR:
             emit_expr(cg, s->expr);
             break;
@@ -3535,6 +3572,14 @@ static int prescan_stmts(StructDecl **structs, int nstructs,
                 *running += 8;
             }
         }
+        /* STMT_NEW: allocate struct on stack for class instance */
+        if (s->kind == STMT_NEW && s->class_name) {
+            int sz = 8;
+            for (int j = 0; j < nstructs; j++)
+                if (strcmp(structs[j]->name, s->class_name) == 0)
+                    { sz = (structs[j]->total_size + 7) & ~7; if (sz < 8) sz = 8; break; }
+            *running += sz;
+        }
         /* recurse into branches */
         if (s->nbody)     prescan_stmts(structs, nstructs, s->body,     s->nbody,     running);
         if (s->nelsebody) prescan_stmts(structs, nstructs, s->elsebody, s->nelsebody, running);
@@ -3556,6 +3601,7 @@ static void emit_func(FuncDecl *fd, FILE *out, CG *parent_cg) {
     cg.using_proc  = parent_cg->using_proc;
     cg.using_str   = parent_cg->using_str;
     cg.using_env   = parent_cg->using_env;
+    cg.using_asm   = parent_cg->using_asm;
     cg.str_counter = parent_cg->str_counter;
     cg.lbl_counter = parent_cg->lbl_counter;
     cg.funcs       = parent_cg->funcs;
@@ -3615,6 +3661,9 @@ static void emit_func(FuncDecl *fd, FILE *out, CG *parent_cg) {
     for (int i = 0; i < fd->nparams; i++) {
         int idx = alloc_var(&cg, fd->params[i].name, fd->params[i].type, 0);
         Var *v  = &cg.vars[idx];
+        /* propagate struct_name so PTR_FIELD/FIELD access knows the struct layout */
+        if (fd->params[i].struct_name)
+            v->struct_name = strdup(fd->params[i].struct_name);
         if (fd->params[i].type == TYPE_STRING) {
             /* ptr in argregs[ri], len in argregs[ri+1] */
             if (ri < 6)
@@ -3686,19 +3735,21 @@ int codegen_emit(Program *prog, FILE *out) {
     /* scan imports to enable stdlib modules — every module must be imported */
     for (int i = 0; i < prog->nimports; i++) {
         const char *m = prog->imports[i].module;
-        if (strcmp(m, "std.io")   == 0) cg.using_io   = 1;
-        if (strcmp(m, "std.math") == 0) cg.using_math = 1;
-        if (strcmp(m, "std.fs")   == 0) cg.using_fs   = 1;
-        if (strcmp(m, "std.mem")  == 0) cg.using_mem  = 1;
-        if (strcmp(m, "std.time") == 0) cg.using_time = 1;
-        if (strcmp(m, "std.net")  == 0) cg.using_net  = 1;
-        if (strcmp(m, "std.proc") == 0) cg.using_proc = 1;
-        if (strcmp(m, "std.str")  == 0) cg.using_str  = 1;
-        if (strcmp(m, "std.env")  == 0) cg.using_env  = 1;
+        int all = (strcmp(m, "std") == 0);  /* import std; → enable everything */
+        if (all || strcmp(m, "std.io")   == 0) cg.using_io   = 1;
+        if (all || strcmp(m, "std.math") == 0) cg.using_math = 1;
+        if (all || strcmp(m, "std.fs")   == 0) cg.using_fs   = 1;
+        if (all || strcmp(m, "std.mem")  == 0) cg.using_mem  = 1;
+        if (all || strcmp(m, "std.time") == 0) cg.using_time = 1;
+        if (all || strcmp(m, "std.net")  == 0) cg.using_net  = 1;
+        if (all || strcmp(m, "std.proc") == 0) cg.using_proc = 1;
+        if (all || strcmp(m, "std.str")  == 0) cg.using_str  = 1;
+        if (all || strcmp(m, "std.env")  == 0) cg.using_env  = 1;
+        if (all || strcmp(m, "std.external.asm") == 0) cg.using_asm = 1;
     }
 
     fprintf(out,
-        "# Silica compiled output -- x86-64 Linux, no libc\n"
+        "# Silica compiled output -- made with v0.0.2\n"
         ".section .text\n");
 
     /* emit user-defined functions */

@@ -1,0 +1,34 @@
+// Test native for/while without std. prefix
+import std.io;
+import std.main;
+
+main loops_native() {
+    // while(condition)
+    int i = 0;
+    while (i < 4) {
+        io.println(i);
+        int i = i + 1;
+    }
+
+    // while(true) + break
+    int x = 10;
+    while (true) {
+        if (x == 12) { break; }
+        int x = x + 1;
+    }
+    io.println(x);
+
+    // for(counted)
+    for (3) {
+        io.println(99);
+    }
+
+    // for(condition)
+    int j = 5;
+    for (j > 2) {
+        io.println(j);
+        int j = j - 1;
+    }
+
+    loops_native.errorcode = 0;
+}

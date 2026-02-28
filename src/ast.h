@@ -71,10 +71,12 @@ typedef enum {
     STMT_EXPR,          /* any expression statement               */
     STMT_RETURN,        /* return <expr>;                         */
     STMT_IF,            /* if(cond) { body } [else { body }]      */
-    STMT_WHILE,         /* loops.while(cond/n/true) { body }      */
-    STMT_FOR,           /* loops.for(cond) { body }               */
+    STMT_WHILE,         /* while(cond) { body }                   */
+    STMT_FOR,           /* for(cond) { body }                     */
     STMT_BREAK,         /* break;                                 */
     STMT_CONTINUE,      /* continue;                              */
+    STMT_ASM,           /* asm("..."); — inline assembly          */
+    STMT_NEW,           /* new ClassName varName;                 */
 } StmtKind;
 
 typedef struct Stmt Stmt;
@@ -95,7 +97,43 @@ struct Stmt {
     int       nbody;
     Stmt    **elsebody;   /* else-branch (IF only, may be NULL)           */
     int       nelsebody;
+    /* asm statement */
+    char     *asm_code;   /* STMT_ASM: the raw assembly string            */
+    /* new statement */
+    char     *class_name; /* STMT_NEW: class type name                    */
 };
+
+/* ── Class field (public or private) ── */
+typedef struct {
+    VarType  type;
+    char    *name;
+    char    *struct_name; /* if type == TYPE_STRUCT */
+    int      is_private;
+} ClassField;
+
+/* ── Class method (public or private) ── */
+typedef struct {
+    char       *name;
+    VarType     rettype;
+    /* params[0] is implicit 'self' pointer — added by parser */
+    /* params are stored as FuncDecl params */
+    int         nparams;
+    void       *params;   /* FuncParam* — cast at use site */
+    Stmt      **stmts;
+    int         nstmts;
+    int         is_private;
+    int         is_static;
+} ClassMethod;
+
+/* ── Class declaration ── */
+typedef struct {
+    char         *name;
+    char         *extends_name;  /* NULL if no inheritance */
+    ClassField   *fields;
+    int           nfields;
+    ClassMethod  *methods;
+    int           nmethods;
+} ClassDecl;
 
 /* ── Struct field ── */
 typedef struct {
@@ -133,6 +171,7 @@ typedef struct {
     int         is_extern;  /* 1 = declared but defined in another .o (don't emit body) */
     int         is_static;  /* 1 = local linkage, no .global directive                  */
     int         is_inline;  /* 1 = inline hint (implies static linkage)                 */
+    int         is_alias;   /* 1 = inherited method alias: stmts/params are NOT owned    */
 } FuncDecl;
 
 /* ── Enum declaration ── */
@@ -166,6 +205,7 @@ typedef struct {
     StructDecl **structs;  int nstructs;
     EnumDecl   **enums;    int nenums;
     TypedefDecl **typedefs; int ntypedefs;
+    ClassDecl  **classes;  int nclasses;
     MainFunc    *mainfn;   /* NULL if not present */
     FuncDecl   **funcs;    int nfuncs;
 } Program;
@@ -177,6 +217,7 @@ FuncDecl    *funcdecl_new(void);
 StructDecl  *structdecl_new(void);
 EnumDecl    *enumdecl_new(void);
 TypedefDecl *typedefdecl_new(void);
+ClassDecl   *classdecl_new(void);
 Program     *program_new(void);
 void         program_free(Program *p);
 
