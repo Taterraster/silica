@@ -1,0 +1,18 @@
+import std.external.asm;
+import std.main;
+// imports
+
+main syscall(){
+	asm ("movabs $0x0a21646c726f5720, %rax");
+	asm("push %rax");
+	asm("movabs $0x2c6f6c6c6548, %rax");
+	asm("push %rax");
+	// push hello world to the stack since we dont have .data
+	asm("mov $1, %rax"); // write
+	asm("mov $1, %rdi"); // stdout
+	asm("mov %rsp, %rsi"); // stack string
+	asm("mov $16, %rdx"); // length
+	asm("syscall"); // syscall
+	// write to standard output
+	syscall.errorcode = 0;
+}
