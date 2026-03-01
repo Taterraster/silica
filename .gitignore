@@ -3,3 +3,4 @@ tests/**
 !tests/**/*.slc
 !tests/**/*.slh
 Silica/
+.vscode/
