@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 /*
- * silicac -- The Silica Language Compiler v0.0.2
+ * silicac -- The Silica Language Compiler v0.0.3
  */
 
 #include <stdio.h>
@@ -280,17 +280,10 @@ static int resolve_imports(Program *prog, const char *base_dir,
  */
 
 static const char *REPL_IMPORTS =
-    "import std.io;\n"
-    "import std.str;\n"
-    "import std.math;\n"
-    "import std.time;\n"
-    "import std.env;\n"
-    "import std.proc;\n"
-    "import std.fs;\n"
-    "import std.mem;\n";
+    "import std;\n";
 
 static void run_repl(void) {
-    printf("Silica REPL v0.0.2  (Ctrl+D to exit)\n");
+    printf("Silica REPL v0.0.3  (Ctrl+D to exit)\n");
     char preamble[65536] = "";
     char extra_imports[4096] = "";
     char line[4096];
@@ -397,7 +390,7 @@ int main(int argc, char **argv) {
         self_path[sizeof(self_path)-1] = '\0';
     }
     if (argc < 2) {
-        fprintf(stderr, "Silica Compiler v0.0.2\nUsage: silicac [options] <source.slc>\n       silicac --repl\n       silicac --help\n");
+        fprintf(stderr, "Silica Compiler v0.0.3\nUsage: silicac [options] <source.slc>\n       silicac --repl\n       silicac --help\n");
         return 1;
     }
 
